@@ -6,20 +6,33 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "worker": "tsx worker/index.ts",
+    "worker:dev": "tsx watch worker/index.ts"
   },
   "dependencies": {
     "next": "16.0.3",
     "react": "19.2.0",
-    "react-dom": "19.2.0"
+    "react-dom": "19.2.0",
+    "bullmq": "^5.12.0",
+    "redis": "^4.7.0",
+    "ts-morph": "^22.0.0",
+    "openai": "^4.20.0",
+    "formidable": "^3.5.1",
+    "adm-zip": "^0.5.10",
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/formidable": "^3.4.5",
+    "@types/adm-zip": "^0.5.5",
+    "@types/uuid": "^9.0.7",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.0.3",
-    "typescript": "^5"
+    "typescript": "^5",
+    "tsx": "^4.6.0"
   }
 }
