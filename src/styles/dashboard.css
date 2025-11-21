@@ -1,0 +1,9 @@
+:root { --bg: #0b1020; --panel: #111827; --indigo: #6366f1 }
+.dash { background-color: var(--bg); color: #fff }
+.panel { background-color: var(--panel) }
+.link { color: var(--indigo) }
+.sidebar { width: 240px }
+.chip { display:inline-block; padding:2px 8px; border-radius:9999px }
+.chip-green { background:#16a34a1a; color:#16a34a }
+.chip-yellow { background:#f59e0b1a; color:#f59e0b }
+.chip-red { background:#dc26261a; color:#dc2626 }
