@@ -11,7 +11,7 @@ export interface AnalysisJob {
   jobId: string;
   gitUrl?: string;
   uploadPath?: string;
-  type: 'git' | 'upload';
+  type: 'git' | 'zip';
 }
 
 export const analysisQueue = new Queue<AnalysisJob>(ANALYSIS_QUEUE_NAME, {

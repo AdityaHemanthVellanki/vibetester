@@ -14,6 +14,10 @@ export async function generateTestsWithLLM(prompt: string): Promise<string> {
       model: MODEL,
       messages: [
         {
+          role: 'system',
+          content: 'You are an assistant that writes production-grade Jest tests.',
+        },
+        {
           role: 'user',
           content: prompt,
         },

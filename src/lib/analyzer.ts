@@ -50,9 +50,8 @@ export class TypeScriptAnalyzer {
       }
     }
 
-    // Sort by number of exports (descending) and select top 4-6 files
     analyzedFiles.sort((a, b) => b.exports.length - a.exports.length);
-    const selectedFiles = analyzedFiles.slice(0, 6);
+    const selectedFiles = analyzedFiles.slice(0, 4);
 
     return {
       files: selectedFiles,
@@ -95,14 +94,21 @@ export class TypeScriptAnalyzer {
   }
 
   buildPrompt(file: AnalyzedFile): string {
-    return `You are an expert developer who writes robust Jest tests.
+    return `You are an expert developer who writes robust, production-ready Jest tests.
+
 File: ${file.relativePath}
 Exports: ${file.exports.join(', ')}
+
 Contents:
 \`\`\`ts
 ${file.content}
 \`\`\`
 
-Produce runnable Jest unit tests for the above file. Use describe/it blocks, cover edge cases, mock external imports, and keep tests self-contained. Return only the test code.`;
+Task:
+\t•\tProduce runnable Jest tests for the above file.
+\t•\tUse describe/it blocks; include edge cases.
+\t•\tMock external imports when necessary (use Jest mocks).
+\t•\tKeep tests self-contained and runnable with jest (or vitest compatibility).
+\t•\tReturn only the test code (no commentary).`;
   }
 }

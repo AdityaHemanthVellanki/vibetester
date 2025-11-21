@@ -10,5 +10,15 @@ services:
     command: redis-server --appendonly yes
     restart: unless-stopped
 
+# worker:
+#   build: .
+#   command: npm run worker
+#   environment:
+#     - REDIS_URL=redis://redis:6379
+#     - OPENAI_API_KEY=${OPENAI_API_KEY}
+#     - LLM_MODEL=${LLM_MODEL}
+#   depends_on:
+#     - redis
+
 volumes:
   redis_data:

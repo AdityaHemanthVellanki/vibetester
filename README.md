@@ -186,4 +186,21 @@ Before deploying to production:
 ## License
 
 MIT
+# Acceptance Criteria
+
+- Start Redis + Next + worker locally
+- POST `/api/analyze` with `gitUrl` returns `{ jobId }`
+- Poll GET `/api/status?jobId=...` shows progress stages and eventually `done`
+- GET `/api/result?jobId=...` downloads a zip containing `__tests__` and at least one `.test.ts`
+- Worker logs show LLM calls, selected files, and zip path
+
+# Node Demo Alternative
+
+```bash
+npm run enqueue:node -- https://github.com/rauchg/nextjs-blog-starter
+```
+
+# Monitoring
+
+- Redis keys: `job:{jobId}:progress`, `job:{jobId}:progress_log`, `job:{jobId}:result`, `job:{jobId}:error`
 # vibetester

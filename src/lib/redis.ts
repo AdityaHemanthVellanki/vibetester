@@ -5,7 +5,6 @@ const redis = new IORedis(redisUrl);
 
 export interface JobProgress {
   stage: string;
-  message: string;
   timestamp: number;
 }
 
@@ -15,19 +14,21 @@ export interface JobResult {
   testFiles: string[];
 }
 
-export async function updateJobProgress(jobId: string, stage: string, message: string): Promise<void> {
-  const progress: JobProgress = {
-    stage,
-    message,
-    timestamp: Date.now(),
-  };
-
-  await redis.rpush(`job:${jobId}:progress`, JSON.stringify(progress));
+export async function setLatestStage(jobId: string, stage: string): Promise<void> {
+  await redis.set(`job:${jobId}:progress`, stage);
 }
 
-export async function getJobProgress(jobId: string): Promise<JobProgress[]> {
-  const progressData = await redis.lrange(`job:${jobId}:progress`, 0, -1);
-  return progressData.map(item => JSON.parse(item));
+export async function appendProgressLog(jobId: string, stage: string): Promise<void> {
+  const key = `job:${jobId}:progress_log`;
+  const existing = await redis.get(key);
+  const arr: JobProgress[] = existing ? JSON.parse(existing) : [];
+  arr.push({ stage, timestamp: Date.now() });
+  await redis.set(key, JSON.stringify(arr));
+}
+
+export async function getProgressLog(jobId: string): Promise<JobProgress[]> {
+  const existing = await redis.get(`job:${jobId}:progress_log`);
+  return existing ? JSON.parse(existing) : [];
 }
 
 export async function setJobResult(jobId: string, result: JobResult): Promise<void> {
@@ -48,29 +49,19 @@ export async function getJobError(jobId: string): Promise<string | null> {
 }
 
 export async function getJobStatus(jobId: string): Promise<{
-  status: 'queued' | 'processing' | 'completed' | 'failed';
+  status: 'queued' | 'processing' | 'done' | 'failed';
   progress: JobProgress[];
   result?: JobResult;
   error?: string;
 }> {
-  const progress = await getJobProgress(jobId);
+  const progress = await getProgressLog(jobId);
   const result = await getJobResult(jobId);
   const error = await getJobError(jobId);
 
-  let status: 'queued' | 'processing' | 'completed' | 'failed' = 'queued';
+  let status: 'queued' | 'processing' | 'done' | 'failed' = 'queued';
+  if (error) status = 'failed';
+  else if (result) status = 'done';
+  else if (progress.length > 0) status = 'processing';
 
-  if (error) {
-    status = 'failed';
-  } else if (result) {
-    status = 'completed';
-  } else if (progress.length > 0) {
-    status = 'processing';
-  }
-
-  return {
-    status,
-    progress,
-    result: result || undefined,
-    error: error || undefined,
-  };
+  return { status, progress, result: result || undefined, error: error || undefined };
 }

@@ -10,7 +10,7 @@ echo "=================================="
 
 # Configuration
 API_BASE="http://localhost:3000"
-TEST_REPO="https://github.com/octokit/rest.js"
+TEST_REPO=${1:-"https://github.com/rauchg/nextjs-blog-starter"}
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -60,7 +60,7 @@ while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
         echo "  Latest: $LATEST_PROGRESS"
     fi
     
-    if [ "$STATUS" = "completed" ]; then
+    if [ "$STATUS" = "done" ]; then
         echo -e "${GREEN}✅ Job completed!${NC}"
         break
     elif [ "$STATUS" = "failed" ]; then

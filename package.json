@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "worker": "tsx worker/index.ts",
-    "worker:dev": "tsx watch worker/index.ts"
+    "worker:dev": "tsx watch worker/index.ts",
+    "analyze:demo": "bash scripts/demo.sh",
+    "enqueue:node": "node scripts/enqueue.js"
   },
   "dependencies": {
     "next": "16.0.3",
