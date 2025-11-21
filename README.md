@@ -145,11 +145,26 @@ src/
     └── index.ts              # Job processing worker
 ```
 
+### Sandboxing & Security
+
+- Analysis runs inside Docker containers with `--network none` and resource limits.
+- Repo mounted read-only to `/repo` and output mounted to `/out`.
+- Host does not execute untrusted code directly; Docker required.
+- Build analyzer image:
+```
+docker build -f sandbox/Dockerfile.analyzer -t analyzer-image .
+```
+- **DO NOT** expose this service publicly without additional hardening.
+- Top next security items:
+  1. MicroVM isolation (Firecracker/gVisor)
+  2. Strict network & filesystem egress rules
+  3. Per-job ephemeral credentials & secrets sanitization
+
 ### Testing
 
 Run the demo script to test the complete flow:
 ```bash
-bash scripts/demo.sh
+bash scripts/demo.sh <gitUrl>
 ```
 
 Or manually test with a sample repository:

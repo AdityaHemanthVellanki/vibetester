@@ -78,23 +78,20 @@ if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
 fi
 
 # Step 3: Download results
-echo -e "\n${YELLOW}Step 3: Downloading results...${NC}"
+echo -e "\n${YELLOW}Step 3: Fetching results JSON...${NC}"
 
-RESULT_FILE="${JOB_ID}-generated.zip"
-curl -s -O "$API_BASE/api/result?jobId=$JOB_ID" -o "$RESULT_FILE"
+RESULT_JSON=$(curl -s "$API_BASE/api/result?jobId=$JOB_ID")
+echo "$RESULT_JSON" | jq '.' || echo "$RESULT_JSON"
 
-if [ -f "$RESULT_FILE" ] && [ -s "$RESULT_FILE" ]; then
-    echo -e "${GREEN}✅ Results downloaded successfully!${NC}"
-    echo "File: $RESULT_FILE ($(du -h "$RESULT_FILE" | cut -f1))"
-    
-    # Show contents
-    echo -e "\n${BLUE}ZIP Contents:${NC}"
-    unzip -l "$RESULT_FILE" | head -20
-    
-    echo -e "\n${GREEN}🎉 Demo completed successfully!${NC}"
-    echo "You can extract the ZIP to examine the generated tests:"
-    echo "  unzip $RESULT_FILE"
-else
-    echo -e "${RED}❌ Failed to download results${NC}"
-    exit 1
-fi
+OUT_DIR=$(echo "$RESULT_JSON" | grep -o '"outDir":"[^"]*' | cut -d'"' -f4)
+FIRST_PATH=$(echo "$RESULT_JSON" | grep -o '"path":"[^"]*' | head -1 | cut -d'"' -f4)
+FIRST_PREVIEW=$(echo "$RESULT_JSON" | grep -o '"preview":"[^"]*' | head -1 | cut -d'"' -f4)
+
+mkdir -p tmp
+PREVIEW_FILE="tmp/demo-${JOB_ID}-first-preview.txt"
+printf "%s" "$FIRST_PREVIEW" > "$PREVIEW_FILE"
+
+echo -e "${GREEN}✅ Results fetched!${NC}"
+echo "OutDir: $OUT_DIR"
+echo "First file: $FIRST_PATH"
+echo "First preview saved to: $PREVIEW_FILE"

@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #__next {
+  height: 100%;
+}
+
+body {
+  background-color: theme('colors.background');
+  color: white;
+}
+
+.card {
+  @apply bg-panel rounded-lg shadow-md p-4;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center rounded-md px-4 py-2 font-medium transition-colors;
+}
+
+.btn-primary {
+  @apply bg-accent hover:bg-accent-alt text-white;
+}
+
+.badge {
+  @apply px-2 py-1 rounded-md bg-accent/30 text-accent;
+}

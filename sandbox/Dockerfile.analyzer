@@ -1,0 +1,17 @@
+FROM node:20-alpine
+
+RUN apk add --no-cache git bash
+
+WORKDIR /app
+
+RUN npm init -y \
+ && npm install ts-morph openai fs-extra adm-zip typescript ts-node
+
+COPY analyzer-entry.ts /app/analyzer-entry.ts
+COPY run-analyzer.sh /app/run-analyzer.sh
+
+RUN chmod +x /app/run-analyzer.sh
+
+ENV NODE_OPTIONS="--loader ts-node/esm"
+
+ENTRYPOINT ["node", "/app/analyzer-entry.ts"]

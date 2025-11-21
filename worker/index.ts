@@ -1,8 +1,8 @@
 import { Worker } from 'bullmq';
 import { ANALYSIS_QUEUE_NAME, redisConnection, AnalysisJob } from '../src/lib/queue';
-import { TypeScriptAnalyzer } from '../src/lib/analyzer';
-import { generateTestsWithLLM } from '../src/lib/llm';
 import { setLatestStage, appendProgressLog, setJobResult, setJobError } from '../src/lib/redis';
+import { uploadOutDir } from '../src/lib/storage';
+import { buildSandboxImage, runSandbox, cleanupSandbox } from '../src/lib/sandbox';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { execSync } from 'child_process';
@@ -65,72 +65,52 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
       throw new Error('Invalid job type or missing parameters');
     }
 
+    const outDir = path.join(TMP_DIR, jobId, 'out');
+    await ensureDir(outDir);
+
+    await buildSandboxImage();
+
     await setLatestStage(jobId, 'scanning');
     await appendProgressLog(jobId, 'scanning');
 
-    const analyzer = new TypeScriptAnalyzer();
-    const analysisResult = await analyzer.analyzeRepository(repoPath);
-
-    console.log(`Found ${analysisResult.totalFiles} files, selected ${analysisResult.selectedFiles} for testing`);
-
-    const generatedDir = path.join(TMP_DIR, `${jobId}-generated`);
-    const testsDir = path.join(generatedDir, '__tests__');
-    await ensureDir(testsDir);
-
-    const testFiles: string[] = [];
-
-    for (let i = 0; i < Math.min(4, analysisResult.files.length); i++) {
-      const file = analysisResult.files[i];
-      await setLatestStage(jobId, `generating: ${file.relativePath}`);
-      await appendProgressLog(jobId, `generating: ${file.relativePath}`);
-
-      try {
-        const prompt = analyzer.buildPrompt(file);
-        const testCode = await generateTestsWithLLM(prompt);
-
-        // Create test file path preserving directory structure
-        const testFileName = file.relativePath.replace(/\.(ts|tsx|js|jsx)$/, '.test.ts');
-        const testFilePath = path.join(testsDir, testFileName);
-        
-        // Ensure directory exists for nested paths
-        await ensureDir(path.dirname(testFilePath));
-        
-        await fs.writeFile(testFilePath, testCode && testCode.trim() ? testCode : `// LLM returned no output for ${file.relativePath}`);
-        testFiles.push(testFileName);
-        
-        console.log(`Generated tests for ${file.relativePath} -> ${testFileName}`);
-      } catch (error) {
-        console.error(`Failed to generate tests for ${file.relativePath}:`, error);
-        
-        // Create a placeholder file with error message
-        const testFileName = file.relativePath.replace(/\.(ts|tsx|js|jsx)$/, '.test.ts');
-        const testFilePath = path.join(testsDir, testFileName);
-        await ensureDir(path.dirname(testFilePath));
-        
-        await fs.writeFile(testFilePath, `// LLM returned no output for ${file.relativePath}`);
-        testFiles.push(testFileName);
+    const exitCode = await runSandbox({
+      jobId,
+      repoDir: repoPath,
+      outDir,
+      env: { OPENAI_API_KEY: process.env.OPENAI_API_KEY, LLM_MODEL: process.env.LLM_MODEL },
+      onLog: async (line) => {
+        await setLatestStage(jobId, line);
+        await appendProgressLog(jobId, line);
       }
+    });
+
+    if (exitCode !== 0) {
+      throw new Error(`Analyzer container exited with code ${exitCode}`);
     }
 
-    await setLatestStage(jobId, 'zipping');
-    await appendProgressLog(jobId, 'zipping');
+    const files: string[] = [];
+    async function collect(dir: string) {
+      const items = await fs.readdir(dir, { withFileTypes: true });
+      for (const it of items) {
+        const full = path.join(dir, it.name);
+        if (it.isDirectory()) await collect(full);
+        else files.push(path.relative(outDir, full));
+      }
+    }
+    await collect(outDir);
 
-    const zip = new AdmZip();
-    zip.addLocalFolder(generatedDir);
-    
-    const zipPath = path.join(TMP_DIR, `${jobId}-generated.zip`);
-    zip.writeZip(zipPath);
-
-    await setJobResult(jobId, {
-      zipPath,
-      fileCount: testFiles.length,
-      testFiles,
-    });
+    const useS3 = process.env.S3_BUCKET && process.env.S3_REGION && process.env.S3_ACCESS_KEY_ID && process.env.S3_SECRET_ACCESS_KEY;
+    if (useS3) {
+      const uploaded = await uploadOutDir(jobId, outDir);
+      await setJobResult(jobId, { s3Prefix: uploaded.s3Prefix, files: uploaded.files.map(f => f.path) });
+    } else {
+      await setJobResult(jobId, { outDir, files });
+    }
 
     await setLatestStage(jobId, 'done');
     await appendProgressLog(jobId, 'done');
 
-    console.log(`Job ${jobId} completed successfully. Generated ${testFiles.length} test files.`);
+    console.log(`Job ${jobId} completed successfully. Generated ${files.length} test files.`);
     
   } catch (error) {
     console.error(`Job ${jobId} failed:`, error);
@@ -138,6 +118,7 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
     await setJobError(jobId, errorMessage);
     await setLatestStage(jobId, 'failed');
     await appendProgressLog(jobId, 'failed');
+    await cleanupSandbox(jobId);
     throw error;
   }
 }
