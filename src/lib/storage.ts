@@ -3,17 +3,25 @@ import { getSignedUrl as sign } from '@aws-sdk/s3-request-presigner'
 import * as fs from 'fs/promises'
 import * as path from 'path'
 
+// Paste your AWS or MinIO credentials in .env
+// AWS keys come from IAM (Programmatic Access)
+// MinIO keys come from container env vars (MINIO_ROOT_USER / MINIO_ROOT_PASSWORD)
+
 function client(): S3Client {
+  const endpoint = process.env.S3_ENDPOINT || undefined
+  const forcePathStyle = String(process.env.S3_FORCE_PATH_STYLE || '').toLowerCase() === 'true'
   return new S3Client({
     region: process.env.S3_REGION || 'us-east-1',
     credentials: {
-      accessKeyId: process.env.S3_ACCESS_KEY_ID || '',
-      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || ''
-    }
+      accessKeyId: process.env.S3_ACCESS_KEY_ID || 'changeme',
+      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || 'changeme',
+    },
+    endpoint,
+    forcePathStyle,
   })
 }
 
-const bucket = process.env.S3_BUCKET || ''
+const bucket = process.env.S3_BUCKET || 'ai-test-architect-dev'
 
 export async function uploadOutDir(jobId: string, localPath: string): Promise<{ s3Prefix: string; files: { path: string; size: number }[] }>{
   const c = client()
@@ -36,11 +44,14 @@ export async function uploadOutDir(jobId: string, localPath: string): Promise<{ 
   return { s3Prefix: prefix, files }
 }
 
-export async function getSignedUrl(key: string): Promise<string> {
+export async function getSignedUrlForKey(key: string): Promise<string> {
   const c = client()
   const cmd = new GetObjectCommand({ Bucket: bucket, Key: key })
   return await sign(c, cmd, { expiresIn: 900 })
 }
+
+// Backward-compatible alias
+export const getSignedUrl = getSignedUrlForKey
 
 export async function listFiles(prefix: string): Promise<string[]>{
   const c = client()

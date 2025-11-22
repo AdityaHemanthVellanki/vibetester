@@ -2,7 +2,10 @@ import IORedis from 'ioredis'
 
 let redis: IORedis | null = null
 function getRedis(): IORedis {
-  if (!redis) redis = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379')
+  if (!redis) {
+    redis = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', { lazyConnect: true, retryStrategy: () => null })
+    redis.on('error', () => {})
+  }
   return redis
 }
 

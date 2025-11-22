@@ -100,9 +100,10 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
     await collect(outDir);
 
     const useS3 = process.env.S3_BUCKET && process.env.S3_REGION && process.env.S3_ACCESS_KEY_ID && process.env.S3_SECRET_ACCESS_KEY;
+    // If S3 credentials are provided in .env, upload to S3
     if (useS3) {
       const uploaded = await uploadOutDir(jobId, outDir);
-      await setJobResult(jobId, { s3Prefix: uploaded.s3Prefix, files: uploaded.files.map(f => f.path) });
+      await setJobResult(jobId, { s3Prefix: uploaded.s3Prefix, files: uploaded.files });
     } else {
       await setJobResult(jobId, { outDir, files });
     }
