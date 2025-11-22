@@ -29,9 +29,16 @@ export default function JobPage() {
         <button className="btn btn-primary" onClick={refreshResult} aria-label="Refresh Result">Refresh Result</button>
       </header>
       <StatusPoller jobId={jobId}>
-        {(data: { status?: string; progress?: string[] }) => {
+        {(data: { status?: string; progress?: string[]; error?: string; gitUrl?: string }) => {
           const status: string = data.status || ''
           const progress: string[] = data.progress || []
+          const error: string = data.error || ''
+          const gitUrl: string = data.gitUrl || ''
+          async function retryClone() {
+            if (!gitUrl) return
+            await fetch('/api/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gitUrl }) })
+            window.location.reload()
+          }
           const badgeColor = status === 'done' ? 'bg-green-600' : status === 'failed' ? 'bg-red-600' : 'bg-yellow-600'
           return (
             <div className="grid md:grid-cols-2 gap-4">
@@ -50,6 +57,22 @@ export default function JobPage() {
                   </div>
                 </div>
                 <LogViewer lines={progress} />
+                {status === 'failed' && error && error.includes('git clone failed') && (
+                  <div className="card mt-4">
+                    <div className="text-sm font-medium mb-2">Clone failure</div>
+                    <div className="font-mono text-xs whitespace-pre-wrap mb-3">{error.slice(0, 500)}</div>
+                    <div className="text-sm opacity-80 mb-2">Suggested actions:</div>
+                    <ul className="list-disc ml-5 text-sm opacity-80 mb-3">
+                      <li>Make repo public or ensure you can git clone locally</li>
+                      <li>Paste HTTPS URL (e.g., https://github.com/owner/repo.git)</li>
+                      <li>Try again (button below)</li>
+                      <li>If private, provide a Personal Access Token</li>
+                    </ul>
+                    <div className="flex gap-2">
+                      <button className="btn btn-primary" onClick={retryClone} aria-label="Retry Clone">Retry Clone</button>
+                    </div>
+                  </div>
+                )}
               </div>
               <div>
                 {fileList.length > 0 ? (

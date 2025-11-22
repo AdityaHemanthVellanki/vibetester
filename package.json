@@ -12,7 +12,7 @@
     "analyze:demo": "bash scripts/demo.sh",
     "enqueue:node": "node scripts/enqueue.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx tests/llm.test.ts"
+    "test": "tsx tests/*.test.ts"
   },
   "dependencies": {
     "next": "16.0.3",

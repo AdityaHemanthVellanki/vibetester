@@ -1,14 +1,14 @@
 import React, { useEffect } from 'react'
 import useSWR from 'swr'
 
-const fetcher = async (url: string): Promise<{ status?: string; progress?: string[] }> => {
+const fetcher = async (url: string): Promise<{ status?: string; progress?: string[]; error?: string; gitUrl?: string }> => {
   const r = await fetch(url)
-  return (await r.json()) as { status?: string; progress?: string[] }
+  return (await r.json()) as { status?: string; progress?: string[]; error?: string; gitUrl?: string }
 }
 
 type Props = {
   jobId: string
-  children?: (data: { status?: string; progress?: string[] }) => React.ReactNode
+  children?: (data: { status?: string; progress?: string[]; error?: string; gitUrl?: string }) => React.ReactNode
 }
 
 export default function StatusPoller({ jobId, children }: Props) {

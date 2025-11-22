@@ -66,7 +66,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.headers['content-type']?.includes('multipart/form-data')) {
       const { fields, files } = await parseForm(req);
       const gitUrlField = fields?.gitUrl;
+      const gitTokenField = fields?.gitToken;
       const gitUrl = Array.isArray(gitUrlField) ? String(gitUrlField[0] || '') : typeof gitUrlField === 'string' ? gitUrlField : '';
+      const gitToken = Array.isArray(gitTokenField) ? String(gitTokenField[0] || '') : typeof gitTokenField === 'string' ? gitTokenField : '';
       const uploaded = files?.file;
 
       if (!gitUrl && !uploaded) {
@@ -90,7 +92,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       try {
-        await addAnalysisJob({ jobId, type: 'git', gitUrl });
+        await addAnalysisJob({ jobId, type: 'git', gitUrl, gitToken } as any);
         return res.status(200).json({ jobId });
       } catch (err: unknown) {
         const code = typeof (err as { code?: unknown })?.code === 'string' ? String((err as { code?: unknown }).code) : ''
@@ -99,10 +101,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(isRedis ? 503 : 500).json({ error: msg });
       }
     } else {
-      const { gitUrl } = req.body || {};
+      const { gitUrl, gitToken: gitTokenBody } = req.body || {};
+      const gitTokenHeader = typeof req.headers['x-git-token'] === 'string' ? String(req.headers['x-git-token']) : ''
+      const gitToken = String(gitTokenBody || gitTokenHeader || '')
       if (!gitUrl) return res.status(400).json({ error: 'gitUrl is required' });
       try {
-        await addAnalysisJob({ jobId, type: 'git', gitUrl });
+        await addAnalysisJob({ jobId, type: 'git', gitUrl, gitToken } as any);
         return res.status(200).json({ jobId });
       } catch (err: unknown) {
         const code = typeof (err as { code?: unknown })?.code === 'string' ? String((err as { code?: unknown }).code) : ''

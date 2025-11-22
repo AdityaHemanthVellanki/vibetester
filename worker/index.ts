@@ -8,6 +8,8 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 import AdmZip from 'adm-zip';
 import { pushMetric } from '@/lib/observability';
+import { sanitizeAndNormalizeGitUrl, cloneWithRetries } from '@/lib/git';
+import * as Sentry from '@sentry/node'
 
 const TMP_DIR = path.join(process.cwd(), 'tmp');
 
@@ -36,20 +38,52 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
     await pushMetric('jobs_started_total', { jobId }, 1);
 
     if (type === 'git' && gitUrl) {
-      await setLatestStage(jobId, 'cloning');
-      await appendProgressLog(jobId, 'cloning');
+      try { await redisConnection.setex(`job:${jobId}:meta`, 3600, JSON.stringify({ gitUrl })) } catch {}
+      await setLatestStage(jobId, 'validating git url');
+      await appendProgressLog(jobId, 'validating git url');
       repoPath = path.join(jobDir, 'repo');
-      
+      const allowedHosts = ['github.com','gitlab.com','bitbucket.org']
+      let normalized = ''
       try {
-        execSync(`git clone --depth 1 ${gitUrl} ${repoPath}`, { 
-          stdio: 'pipe',
-          timeout: 30000, // 30 second timeout
-        });
-      } catch (error) {
-        throw new Error(`Failed to clone repository: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        normalized = sanitizeAndNormalizeGitUrl(gitUrl, (job as any).gitToken)
+        const host = new URL(normalized).hostname
+        if (!allowedHosts.includes(host)) {
+          const msg = `git host not allowed: ${host}`
+          await setJobError(jobId, msg)
+          await setLatestStage(jobId, 'failed')
+          await appendProgressLog(jobId, `failed: ${msg}`)
+          throw new Error(msg)
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        await setJobError(jobId, `git url invalid: ${msg}`)
+        await setLatestStage(jobId, 'failed')
+        await appendProgressLog(jobId, `failed: git url invalid: ${msg}`)
+        throw e
       }
-      await setLatestStage(jobId, 'cloned');
-      await appendProgressLog(jobId, 'cloned');
+
+      await appendProgressLog(jobId, 'cloning')
+      await setLatestStage(jobId, 'cloning')
+      try { await fs.rm(repoPath, { recursive: true, force: true }) } catch {}
+      const cloneRes = await cloneWithRetries(normalized, repoPath, { retries: 2, timeoutMs: 30_000 })
+      if (!cloneRes.success) {
+        const short = cloneRes.errorMessage || 'unknown error'
+        const suggest = 'Check network connectivity, repo visibility, ensure HTTPS URL, or try again.'
+        const fullMsg = `git clone failed: ${short}. ${suggest}`
+        await setJobError(jobId, fullMsg)
+        await setLatestStage(jobId, 'failed')
+        await appendProgressLog(jobId, `failed: ${fullMsg}`)
+        await pushMetric('job_clone_failures_total', { jobId, error_type: String(cloneRes.errorType || 'OTHER') }, 1)
+        try {
+          if (process.env.SENTRY_DSN) {
+            Sentry.init({ dsn: process.env.SENTRY_DSN })
+            Sentry.captureException(new Error(fullMsg), { tags: { jobId, host: new URL(normalized).hostname, error_type: String(cloneRes.errorType || 'OTHER') } })
+          }
+        } catch {}
+        throw new Error(fullMsg)
+      }
+      await setLatestStage(jobId, 'cloned')
+      await appendProgressLog(jobId, 'cloned')
     } else if (type === 'zip' && uploadPath) {
       await setLatestStage(jobId, 'extracting');
       await appendProgressLog(jobId, 'extracting');

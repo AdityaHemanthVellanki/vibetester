@@ -66,6 +66,13 @@ while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
     elif [ "$STATUS" = "failed" ]; then
         ERROR=$(echo "$STATUS_RESPONSE" | grep -o '"error":"[^"]*' | cut -d'"' -f4)
         echo -e "${RED}❌ Job failed: $ERROR${NC}"
+        if echo "$ERROR" | grep -qi "git clone failed"; then
+          echo "Suggestions:"
+          echo "- Check network connectivity"
+          echo "- Ensure HTTPS URL (e.g., https://github.com/owner/repo.git)"
+          echo "- Make repo public or provide a Personal Access Token"
+          echo "- Try again"
+        fi
         exit 1
     fi
     
