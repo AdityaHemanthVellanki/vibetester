@@ -1,6 +1,7 @@
 import React from 'react'
 import DashboardLayout from '@/components/DashboardLayout'
 import StatCard from '@/components/StatCard'
+import Link from 'next/link'
 
 export default function Dashboard() {
   return (
@@ -11,7 +12,7 @@ export default function Dashboard() {
         <StatCard title="Active API Keys" value={2} />
       </div>
       <div className="mt-6">
-        <a className="btn btn-primary" href="/">Upload Repo</a>
+        <Link className="btn btn-primary" href="/">Upload Repo</Link>
       </div>
     </DashboardLayout>
   )

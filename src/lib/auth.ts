@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken'
-import { upsertUser, getUserById, findApiKeyByHash } from '@/lib/db'
+import { findApiKeyByHash } from '@/lib/db'
 import crypto from 'crypto'
 
 type Session = { id: number; email: string }
@@ -13,21 +13,22 @@ export function verifySessionToken(token: string | undefined): Session | null {
   if (!token) return null
   try {
     const secret = process.env.JWT_SECRET || 'dev-secret'
-    const decoded = jwt.verify(token, secret) as any
-    return { id: decoded.id, email: decoded.email }
+    const decoded = jwt.verify(token, secret) as jwt.JwtPayload | string
+    if (typeof decoded === 'string') return null
+    return { id: Number(decoded.id), email: String(decoded.email) }
   } catch {
     return null
   }
 }
 
-export function parseSessionCookie(req: any): string | undefined {
+export function parseSessionCookie(req: { headers?: { cookie?: string } }): string | undefined {
   const cookie = req.headers?.cookie || ''
   const m = cookie.split(';').map(s => s.trim()).find(s => s.startsWith('session='))
   if (!m) return undefined
   return decodeURIComponent(m.split('=')[1])
 }
 
-export function verifySession(req: any): Session | null {
+export function verifySession(req: { headers?: { cookie?: string } }): Session | null {
   const token = parseSessionCookie(req)
   return verifySessionToken(token)
 }
@@ -37,7 +38,7 @@ export function hashApiKey(key: string): string {
   return crypto.createHmac('sha256', secret).update(key).digest('hex')
 }
 
-export function validateApiKeyHeader(req: any): { apiKeyId: number; userId: number } | null {
+export function validateApiKeyHeader(req: { headers: Record<string, string | string[] | undefined> }): { apiKeyId: number; userId: number } | null {
   const key = req.headers['x-api-key']
   if (!key || typeof key !== 'string') return null
   const keyHash = hashApiKey(key)

@@ -1,11 +1,10 @@
 import { Project } from 'ts-morph'
-import fs from 'fs-extra'
+import * as fs from 'fs/promises'
 import path from 'path'
 import OpenAI from 'openai'
 
 const REPO_DIR = process.env.REPO_DIR || '/repo'
 const OUT_DIR = process.env.OUT_DIR || '/out'
-const JOB_ID = process.env.JOB_ID || 'unknown'
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY
 const LLM_MODEL = process.env.LLM_MODEL || 'gpt-4o-mini'
 
@@ -54,9 +53,12 @@ async function main(): Promise<number> {
     return 1
   }
 
-  await fs.ensureDir(OUT_DIR)
+  async function ensureDir(dir: string){
+    try { await fs.access(dir) } catch { await fs.mkdir(dir, { recursive: true }) }
+  }
+  await ensureDir(OUT_DIR)
   const testsRoot = path.join(OUT_DIR, '__tests__')
-  await fs.ensureDir(testsRoot)
+  await ensureDir(testsRoot)
 
   await log('scanning')
   const project = new Project({ compilerOptions: { allowJs: true, jsx: 1 } })
@@ -92,12 +94,13 @@ async function main(): Promise<number> {
         max_tokens: 1400,
       })
       testCode = resp.choices[0]?.message?.content?.trim() || ''
-    } catch (e: any) {
-      await log(`[llm-error] ${e?.message || String(e)}`)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      await log(`[llm-error] ${msg}`)
     }
 
     const outPath = path.join(testsRoot, file.rel.replace(/\.(ts|tsx|js|jsx)$/, '.test.ts'))
-    await fs.ensureDir(path.dirname(outPath))
+    await ensureDir(path.dirname(outPath))
     await fs.writeFile(outPath, testCode || `// LLM returned no output for ${file.rel}`)
   }
 
@@ -105,7 +108,8 @@ async function main(): Promise<number> {
   return 0
 }
 
-main().then(code => process.exit(code)).catch(async (e) => {
-  await log(`[fatal] ${e?.message || String(e)}`)
+main().then(code => process.exit(code)).catch(async (e: unknown) => {
+  const msg = e instanceof Error ? e.message : String(e)
+  await log(`[fatal] ${msg}`)
   process.exit(1)
 })

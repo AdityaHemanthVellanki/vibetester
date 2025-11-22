@@ -1,35 +1,28 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import DashboardLayout from '@/components/DashboardLayout'
 import ApiKeyCard from '@/components/ApiKeyCard'
+import useSWR from 'swr'
 
 type Key = { id: number; revoked: number; createdAt: number }
 
 export default function ApiKeysPage() {
-  const [keys, setKeys] = useState<Key[]>([])
   const [newKey, setNewKey] = useState<string | null>(null)
-
-  async function load() {
-    const res = await fetch('/api/apikeys')
-    if (res.ok) {
-      const json = await res.json()
-      setKeys(json.keys || [])
-    }
-  }
-
-  useEffect(() => { load() }, [])
+  const fetcher = (url: string) => fetch(url).then(r => r.json())
+  const { data, mutate } = useSWR<{ keys: Key[] }>('/api/apikeys', fetcher)
+  const keys: Key[] = data?.keys || []
 
   async function create() {
     const res = await fetch('/api/apikeys', { method: 'POST' })
     if (res.ok) {
       const json = await res.json()
       setNewKey(json.key)
-      load()
+      await mutate()
     }
   }
 
   async function revoke(id: number) {
     await fetch(`/api/apikeys?id=${id}`, { method: 'DELETE' })
-    load()
+    await mutate()
   }
 
   return (

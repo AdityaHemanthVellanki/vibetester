@@ -15,8 +15,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const status = await getJobStatus(jobId);
     return res.status(200).json({ jobId, ...status });
-  } catch (e: any) {
-    const msg = e?.message || 'Failed to get job status';
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Failed to get job status';
     const isRedis = msg.includes('ECONNREFUSED') || msg.includes('Redis');
     return res.status(isRedis ? 503 : 500).json({ error: isRedis ? 'Redis unavailable' : msg });
   }

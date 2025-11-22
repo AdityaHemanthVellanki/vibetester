@@ -1,12 +1,13 @@
 import { Worker } from 'bullmq';
-import { ANALYSIS_QUEUE_NAME, redisConnection, AnalysisJob } from '../src/lib/queue';
-import { setLatestStage, appendProgressLog, setJobResult, setJobError } from '../src/lib/redis';
-import { uploadOutDir } from '../src/lib/storage';
-import { buildSandboxImage, runSandbox, cleanupSandbox } from '../src/lib/sandbox';
+import { ANALYSIS_QUEUE_NAME, redisConnection, AnalysisJob } from '@/lib/queue';
+import { setLatestStage, appendProgressLog, setJobResult, setJobError } from '@/lib/redis';
+import { uploadOutDir } from '@/lib/storage';
+import { buildSandboxImage, runSandbox, cleanupSandbox } from '@/lib/sandbox';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import AdmZip from 'adm-zip';
+import { pushMetric } from '@/lib/observability';
 
 const TMP_DIR = path.join(process.cwd(), 'tmp');
 
@@ -31,6 +32,8 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
 
     await setLatestStage(jobId, 'started');
     await appendProgressLog(jobId, 'started');
+    await redisConnection.set(`job:${jobId}:startedAt`, String(Date.now()));
+    await pushMetric('jobs_started_total', { jobId }, 1);
 
     if (type === 'git' && gitUrl) {
       await setLatestStage(jobId, 'cloning');
@@ -99,17 +102,29 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
     }
     await collect(outDir);
 
-    const useS3 = process.env.S3_BUCKET && process.env.S3_REGION && process.env.S3_ACCESS_KEY_ID && process.env.S3_SECRET_ACCESS_KEY;
-    // If S3 credentials are provided in .env, upload to S3
-    if (useS3) {
-      const uploaded = await uploadOutDir(jobId, outDir);
-      await setJobResult(jobId, { s3Prefix: uploaded.s3Prefix, files: uploaded.files });
+    const credsPresent = process.env.S3_BUCKET && process.env.S3_ACCESS_KEY_ID && process.env.S3_SECRET_ACCESS_KEY && process.env.S3_ENDPOINT;
+    // If object storage credentials present, upload and store S3/R2 metadata
+    if (credsPresent) {
+      try {
+        const uploaded = await uploadOutDir(jobId, outDir);
+        await setJobResult(jobId, { s3Prefix: uploaded.s3Prefix, files: uploaded.files } as any);
+      } catch (e) {
+        await setJobError(jobId, e instanceof Error ? e.message : 'Upload failed');
+        throw e;
+      }
     } else {
-      await setJobResult(jobId, { outDir, files });
+      await setJobResult(jobId, { outDir, files } as any);
     }
 
     await setLatestStage(jobId, 'done');
     await appendProgressLog(jobId, 'done');
+    await redisConnection.set(`job:${jobId}:completedAt`, String(Date.now()));
+    const s = await redisConnection.get(`job:${jobId}:startedAt`)
+    const c = await redisConnection.get(`job:${jobId}:completedAt`)
+    const startedAt = s ? Number(s) : 0
+    const completedAt = c ? Number(c) : 0
+    const durationMs = startedAt && completedAt ? (completedAt - startedAt) : 0
+    await pushMetric('job_duration_seconds', { jobId }, durationMs / 1000);
 
     console.log(`Job ${jobId} completed successfully. Generated ${files.length} test files.`);
     
@@ -119,6 +134,7 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
     await setJobError(jobId, errorMessage);
     await setLatestStage(jobId, 'failed');
     await appendProgressLog(jobId, 'failed');
+    await pushMetric('jobs_failed_total', { jobId }, 1);
     await cleanupSandbox(jobId);
     throw error;
   }
@@ -126,7 +142,7 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
 
 const worker = new Worker(ANALYSIS_QUEUE_NAME, async (job) => {
   const analysisJob = job.data as AnalysisJob;
-  const tenMinutes = 10 * 60 * 1000;
+  const tenMinutes = Number(process.env.SANDBOX_TIMEOUT_MS || '600000');
   const timeoutPromise = new Promise<void>((_, reject) => {
     setTimeout(() => reject(new Error('Job timed out after 10 minutes')), tenMinutes);
   });

@@ -16,12 +16,15 @@ export const config = {
   },
 };
 
-async function parseForm(req: NextApiRequest): Promise<{ fields: any; files: any }> {
+type FormFields = Record<string, string | string[]>
+type UploadFile = { filepath: string; size?: number; originalFilename?: string }
+type FormFiles = Record<string, UploadFile | UploadFile[] | undefined>
+async function parseForm(req: NextApiRequest): Promise<{ fields: FormFields; files: FormFiles }> {
   const form = formidable({ multiples: false, maxFileSize: 50 * 1024 * 1024 });
   return new Promise((resolve, reject) => {
     form.parse(req, (err, fields, files) => {
       if (err) return reject(err);
-      resolve({ fields, files });
+      resolve({ fields: fields as FormFields, files: files as FormFiles });
     });
   });
 }
@@ -70,16 +73,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(400).json({ error: 'Either gitUrl or file must be provided' });
       }
 
-      if (uploaded && uploaded.filepath) {
+      const upOne = Array.isArray(uploaded) ? uploaded[0] : uploaded as UploadFile | undefined
+      if (upOne && upOne.filepath) {
         const dest = path.join(jobTmpDir, 'upload.zip');
-        const data = await fs.readFile(uploaded.filepath);
+        const data = await fs.readFile(upOne.filepath);
         await fs.writeFile(dest, data);
         try {
           await addAnalysisJob({ jobId, type: 'zip', uploadPath: dest });
           return res.status(200).json({ jobId });
-        } catch (err: any) {
-          const msg = err?.message || 'Failed to enqueue job';
-          const isRedis = msg.includes('Redis unavailable') || String(err?.code || '').includes('ECONNREFUSED');
+        } catch (err: unknown) {
+          const code = typeof (err as { code?: unknown })?.code === 'string' ? String((err as { code?: unknown }).code) : ''
+          const msg = err instanceof Error ? err.message : 'Failed to enqueue job'
+          const isRedis = msg.includes('Redis unavailable') || code.includes('ECONNREFUSED');
           return res.status(isRedis ? 503 : 500).json({ error: msg });
         }
       }
@@ -87,9 +92,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       try {
         await addAnalysisJob({ jobId, type: 'git', gitUrl });
         return res.status(200).json({ jobId });
-      } catch (err: any) {
-        const msg = err?.message || 'Failed to enqueue job';
-        const isRedis = msg.includes('Redis unavailable') || String(err?.code || '').includes('ECONNREFUSED');
+      } catch (err: unknown) {
+        const code = typeof (err as { code?: unknown })?.code === 'string' ? String((err as { code?: unknown }).code) : ''
+        const msg = err instanceof Error ? err.message : 'Failed to enqueue job'
+        const isRedis = msg.includes('Redis unavailable') || code.includes('ECONNREFUSED');
         return res.status(isRedis ? 503 : 500).json({ error: msg });
       }
     } else {
@@ -98,14 +104,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       try {
         await addAnalysisJob({ jobId, type: 'git', gitUrl });
         return res.status(200).json({ jobId });
-      } catch (err: any) {
-        const msg = err?.message || 'Failed to enqueue job';
-        const isRedis = msg.includes('Redis unavailable') || String(err?.code || '').includes('ECONNREFUSED');
+      } catch (err: unknown) {
+        const code = typeof (err as { code?: unknown })?.code === 'string' ? String((err as { code?: unknown }).code) : ''
+        const msg = err instanceof Error ? err.message : 'Failed to enqueue job'
+        const isRedis = msg.includes('Redis unavailable') || code.includes('ECONNREFUSED');
         return res.status(isRedis ? 503 : 500).json({ error: msg });
       }
     }
-    insertUsage(session ? session.id : null, apiKeyAuth ? apiKeyAuth.apiKeyId : null, '/api/analyze')
+    // Usage logging can be added per request lifecycle as needed
   } catch (error) {
+    void error
     return res.status(500).json({ error: 'Failed to process analysis request' });
   }
 }

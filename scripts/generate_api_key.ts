@@ -8,7 +8,8 @@ async function main() {
     process.exit(1)
   }
   const d = getDb()
-  const user = d.prepare('SELECT id FROM users WHERE email = ?').get(email) as any
+  const row = d.prepare('SELECT id FROM users WHERE email = ?').get(email) as unknown
+  const user = typeof row === 'object' && row !== null && 'id' in row ? (row as { id: number }) : undefined
   if (!user) {
     process.stderr.write('user not found\n')
     process.exit(1)

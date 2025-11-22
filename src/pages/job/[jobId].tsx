@@ -1,13 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import StatusPoller from '@/components/StatusPoller'
 import LogViewer from '@/components/LogViewer'
 import FileList from '@/components/FileList'
 import CodePreviewModal from '@/components/CodePreviewModal'
+import useSWR from 'swr'
 
-type FileItem = { path: string; preview: string }
+type FileItem = { path: string; size?: number; signedUrl?: string }
+type ResultPayload = { jobId: string; s3Prefix?: string; files?: FileItem[] }
 
 export default function JobPage() {
-  const [fileList, setFileList] = useState<FileItem[]>([])
   const [selected, setSelected] = useState<FileItem | null>(null)
   const jobId = useMemo(() => {
     if (typeof window === 'undefined') return ''
@@ -15,18 +16,11 @@ export default function JobPage() {
     return parts[parts.length - 1]
   }, [])
 
-  async function refreshResult() {
-    const res = await fetch(`/api/result?jobId=${encodeURIComponent(jobId)}`)
-    if (res.ok) {
-      const json = await res.json()
-      setFileList(json.files || [])
-    }
-  }
-
-  useEffect(() => {
-    // try to load result immediately once
-    if (jobId) refreshResult()
-  }, [jobId])
+  const fetcher = (url: string) => fetch(url).then(r => r.json())
+  const key = jobId ? `/api/result?jobId=${encodeURIComponent(jobId)}` : null
+  const { data: result, mutate } = useSWR<ResultPayload | null>(key, fetcher)
+  const fileList: FileItem[] = (result?.files || [])
+  async function refreshResult() { await mutate() }
 
   return (
     <div className="min-h-screen px-4 py-8">
@@ -35,8 +29,8 @@ export default function JobPage() {
         <button className="btn btn-primary" onClick={refreshResult} aria-label="Refresh Result">Refresh Result</button>
       </header>
       <StatusPoller jobId={jobId}>
-        {(data: any) => {
-          const status: string = data.status
+        {(data: { status?: string; progress?: string[] }) => {
+          const status: string = data.status || ''
           const progress: string[] = data.progress || []
           const badgeColor = status === 'done' ? 'bg-green-600' : status === 'failed' ? 'bg-red-600' : 'bg-yellow-600'
           return (

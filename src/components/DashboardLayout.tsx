@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import Link from 'next/link'
 import LogoutButton from './LogoutButton'
 
 type User = { id: number; email: string; githubId: string }
@@ -23,11 +24,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <aside className="sidebar hidden md:block panel min-h-screen p-4">
           <div className="text-lg mb-4">Dashboard</div>
           <nav className="space-y-2">
-            <a className="block link" href="/dashboard">Overview</a>
-            <a className="block link" href="/dashboard/api-keys">API Keys</a>
-            <a className="block link" href="/dashboard/jobs">Jobs</a>
-            <a className="block link" href="/dashboard/usage">Usage</a>
-            <a className="block link" href="/">Settings</a>
+            <Link className="block link" href="/dashboard">Overview</Link>
+            <Link className="block link" href="/dashboard/api-keys">API Keys</Link>
+            <Link className="block link" href="/dashboard/jobs">Jobs</Link>
+            <Link className="block link" href="/dashboard/usage">Usage</Link>
+            <Link className="block link" href="/">Settings</Link>
           </nav>
         </aside>
         <main className="flex-1 p-4">

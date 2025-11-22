@@ -10,7 +10,9 @@
     "worker": "tsx worker/index.ts",
     "worker:dev": "tsx watch worker/index.ts",
     "analyze:demo": "bash scripts/demo.sh",
-    "enqueue:node": "node scripts/enqueue.js"
+    "enqueue:node": "node scripts/enqueue.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx tests/llm.test.ts"
   },
   "dependencies": {
     "next": "16.0.3",

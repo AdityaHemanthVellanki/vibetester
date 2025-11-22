@@ -1,6 +1,6 @@
 import React from 'react'
 
-type FileItem = { path: string; preview: string }
+type FileItem = { path: string; size?: number; signedUrl?: string }
 
 type Props = {
   files: FileItem[]
@@ -17,7 +17,7 @@ export default function FileList({ files, onOpen }: Props) {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="font-mono text-xs">{f.path}</div>
-                <div className="text-xs opacity-80 mt-1">{(f.preview || '').slice(0, 120)}</div>
+                <div className="text-xs opacity-80 mt-1">{typeof f.size === 'number' ? `${f.size} bytes` : ''}</div>
               </div>
               <button className="btn btn-primary" onClick={() => onOpen(f)} aria-label={`Open ${f.path}`}>Preview</button>
             </div>

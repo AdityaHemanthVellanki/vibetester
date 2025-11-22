@@ -3,8 +3,8 @@
 // AWS: supply Access Key + Secret from IAM (Programmatic Access)
 // MinIO: supply MINIO_ROOT_USER + MINIO_ROOT_PASSWORD
 
-const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3')
-const { getSignedUrl } = require('@aws-sdk/s3-request-presigner')
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 function client() {
   const endpoint = process.env.S3_ENDPOINT || undefined
@@ -33,8 +33,9 @@ async function main() {
     const url = await getSignedUrl(c, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn: 60 })
     process.stdout.write(`Signed URL: ${url}\n`)
     process.stdout.write('✅ S3 connectivity OK\n')
-  } catch (e) {
-    process.stderr.write(`❌ S3 test failed: ${e && e.message ? e.message : e}\n`)
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e)
+    process.stderr.write(`❌ S3 test failed: ${msg}\n`)
     process.stderr.write('If this fails, update .env with real AWS or MinIO credentials.\n')
     process.stderr.write('AWS: use IAM Access Key + Secret. MinIO: use MINIO_ROOT_USER + MINIO_ROOT_PASSWORD.\n')
     process.exit(1)

@@ -1,11 +1,14 @@
 import React, { useEffect } from 'react'
 import useSWR from 'swr'
 
-const fetcher = (url: string) => fetch(url).then(r => r.json())
+const fetcher = async (url: string): Promise<{ status?: string; progress?: string[] }> => {
+  const r = await fetch(url)
+  return (await r.json()) as { status?: string; progress?: string[] }
+}
 
 type Props = {
   jobId: string
-  children?: (data: any) => React.ReactNode
+  children?: (data: { status?: string; progress?: string[] }) => React.ReactNode
 }
 
 export default function StatusPoller({ jobId, children }: Props) {

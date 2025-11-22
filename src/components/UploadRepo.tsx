@@ -34,8 +34,9 @@ export default function UploadRepo({ onSubmitted }: Props) {
       const data = await res.json()
       onSubmitted?.(data.jobId)
       window.location.href = `/job/${data.jobId}`
-    } catch (err: any) {
-      setError(err?.message || 'Unknown error')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      setError(msg)
     } finally {
       setLoading(false)
     }

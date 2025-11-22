@@ -59,6 +59,11 @@ npm run dev
 npm run worker
 ```
 
+### Cloudflare R2 Connectivity Test
+```bash
+node scripts/test_r2_connection.js
+```
+
 ## API Usage
 
 ### Submit Analysis Job
@@ -99,9 +104,19 @@ Response:
 }
 ```
 
-### Download Results
+### Fetch Results JSON
 ```bash
-curl -O http://localhost:3000/api/result?jobId=uuid-here
+curl http://localhost:3000/api/result?jobId=uuid-here
+```
+Response:
+```json
+{
+  "jobId": "...",
+  "s3Prefix": "bucketName/jobId/out/",
+  "files": [
+    { "path": "__tests__/a.test.ts", "size": 1234, "signedUrl": "https://..." }
+  ]
+}
 ```
 
 ## Environment Variables
@@ -160,11 +175,19 @@ docker build -f sandbox/Dockerfile.analyzer -t analyzer-image .
   2. Strict network & filesystem egress rules
   3. Per-job ephemeral credentials & secrets sanitization
 
-### Testing
+### Full-Stack Testing
 
 Run the demo script to test the complete flow:
 ```bash
 bash scripts/demo.sh <gitUrl>
+```
+
+Or enqueue with API key:
+```bash
+curl -X POST http://localhost:3000/api/analyze \
+  -H "x-api-key: <YOUR_API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{"gitUrl":"https://github.com/owner/repo"}'
 ```
 
 Or manually test with a sample repository:
@@ -197,6 +220,30 @@ Before deploying to production:
 4. **Add Authentication**: Implement API authentication
 5. **Set Up Monitoring**: Add application monitoring and alerting
 6. **Configure Resource Limits**: Set appropriate CPU/memory limits
+
+## Cloudflare R2 Object Storage
+
+Use Cloudflare R2 to store job outputs and serve signed URLs.
+
+Steps:
+- Cloudflare dashboard → R2 → Create bucket.
+- R2 → Access keys → Create key (Access Key ID + Secret).
+- Copy bucket endpoint or account id, set `S3_ENDPOINT=https://<ACCOUNT_ID>.r2.cloudflarestorage.com`.
+
+Example `.env` snippet for R2:
+```
+S3_PROVIDER=cloudflare
+S3_BUCKET=your-r2-bucket-name
+S3_REGION=auto
+S3_ACCESS_KEY_ID=changeme-r2-access-key
+S3_SECRET_ACCESS_KEY=changeme-r2-secret
+S3_ENDPOINT=https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+S3_FORCE_PATH_STYLE=true
+```
+
+Notes:
+- R2 is S3-compatible and works with AWS SDK v3 presigned URLs.
+- If planning browser direct downloads, configure CORS in the R2 bucket settings to allow GET from your domain.
 
 ## License
 
