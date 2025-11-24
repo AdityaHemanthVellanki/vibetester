@@ -45,12 +45,12 @@ export function sanitizeAndNormalizeGitUrl(rawUrl: string, token?: string): stri
   return u
 }
 
-export async function cloneWithRetries(url: string, dest: string, opts: { retries: number; timeoutMs: number }): Promise<{ success: boolean; errorMessage?: string; errorType?: string }>{
+export async function cloneWithRetries(url: string, dest: string, opts: { retries: number; timeoutMs: number; scrubToken?: string }): Promise<{ success: boolean; errorMessage?: string; errorType?: string }>{
   const attempts = Math.max(0, opts.retries) + 1
   let lastErr: { msg: string; type?: string } | null = null
 
   for (let i = 0; i < attempts; i++) {
-    const res = await attemptClone(url, dest, opts.timeoutMs)
+    const res = await attemptClone(url, dest, opts.timeoutMs, opts.scrubToken)
     if (res.success) return { success: true }
     lastErr = { msg: res.errorMessage || 'unknown error', type: res.errorType }
     const backoffMs = 1000 * Math.pow(2, i)
@@ -60,7 +60,7 @@ export async function cloneWithRetries(url: string, dest: string, opts: { retrie
   return { success: false, errorMessage: lastErr?.msg, errorType: lastErr?.type }
 }
 
-function attemptClone(url: string, dest: string, timeoutMs: number): Promise<{ success: boolean; errorMessage?: string; errorType?: string }>{
+function attemptClone(url: string, dest: string, timeoutMs: number, scrub?: string): Promise<{ success: boolean; errorMessage?: string; errorType?: string }>{
   return new Promise((resolve) => {
     const args = ['clone', '--depth', '1', '--no-tags', '--single-branch', '--quiet', url, dest]
     const proc = spawn('git', args, { stdio: ['ignore', 'pipe', 'pipe'] })
@@ -78,7 +78,8 @@ function attemptClone(url: string, dest: string, timeoutMs: number): Promise<{ s
       clearTimeout(timer)
       if (!code && !timedOut) return resolve({ success: true })
       // classify error type
-      const msg = timedOut ? `timeout after ${timeoutMs}ms` : (stderr.trim() || `git exited ${code}`)
+      let msg = timedOut ? `timeout after ${timeoutMs}ms` : (stderr.trim() || `git exited ${code}`)
+      if (scrub && scrub.length > 0) { try { msg = msg.split(scrub).join('***') } catch {} }
       const lower = msg.toLowerCase()
       const type = lower.includes('refused') ? 'ECONNREFUSED'
         : lower.includes('timed out') || timedOut ? 'ETIMEDOUT'
@@ -89,7 +90,8 @@ function attemptClone(url: string, dest: string, timeoutMs: number): Promise<{ s
     })
     proc.on('error', (err) => {
       clearTimeout(timer)
-      const msg = err && typeof err === 'object' && 'message' in err ? String((err as any).message) : String(err)
+      let msg = err && typeof err === 'object' && 'message' in err ? String((err as any).message) : String(err)
+      if (scrub && scrub.length > 0) { try { msg = msg.split(scrub).join('***') } catch {} }
       const lower = msg.toLowerCase()
       const type = lower.includes('refused') ? 'ECONNREFUSED'
         : lower.includes('timed out') ? 'ETIMEDOUT'

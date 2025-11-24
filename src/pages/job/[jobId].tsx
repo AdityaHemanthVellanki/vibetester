@@ -3,6 +3,7 @@ import StatusPoller from '@/components/StatusPoller'
 import LogViewer from '@/components/LogViewer'
 import FileList from '@/components/FileList'
 import CodePreviewModal from '@/components/CodePreviewModal'
+import RetryModal from '@/components/RetryModal'
 import useSWR from 'swr'
 
 type FileItem = { path: string; size?: number; signedUrl?: string }
@@ -10,6 +11,7 @@ type ResultPayload = { jobId: string; s3Prefix?: string; files?: FileItem[] }
 
 export default function JobPage() {
   const [selected, setSelected] = useState<FileItem | null>(null)
+  const [retryOpen, setRetryOpen] = useState(false)
   const jobId = useMemo(() => {
     if (typeof window === 'undefined') return ''
     const parts = window.location.pathname.split('/')
@@ -35,9 +37,7 @@ export default function JobPage() {
           const error: string = data.error || ''
           const gitUrl: string = data.gitUrl || ''
           async function retryClone() {
-            if (!gitUrl) return
-            await fetch('/api/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gitUrl }) })
-            window.location.reload()
+            setRetryOpen(true)
           }
           const badgeColor = status === 'done' ? 'bg-green-600' : status === 'failed' ? 'bg-red-600' : 'bg-yellow-600'
           return (
@@ -86,6 +86,7 @@ export default function JobPage() {
         }}
       </StatusPoller>
       <CodePreviewModal file={selected} onClose={() => setSelected(null)} />
+      <RetryModal open={retryOpen} onClose={() => setRetryOpen(false)} jobId={jobId} onRetried={(newId) => { window.location.href = `/job/${newId}` }} />
     </div>
   )
 }

@@ -1,0 +1,1 @@
+This directory stores Redis backup snapshots created by scripts/redis/backup.sh.

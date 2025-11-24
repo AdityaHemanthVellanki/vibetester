@@ -37,6 +37,7 @@ A TypeScript backend that accepts a repository (zip or GitHub URL), enqueues a j
 ### 1. Start Redis
 ```bash
 docker-compose up -d
+docker exec -it ai-test-architect-redis redis-cli ping
 ```
 
 ### 2. Install Dependencies
@@ -49,6 +50,11 @@ npm install
 cp .env.example .env
 # Edit .env and add your OpenAI API key
 ```
+
+#### Hosting REDIS_URL
+- Vercel: add `REDIS_URL` (e.g., `redis://:PASSWORD@HOST:PORT`) in Project → Settings → Environment Variables.
+- Render: add `REDIS_URL` in Service Environment.
+- Fly.io: set `REDIS_URL` via secrets: `fly secrets set REDIS_URL=redis://...`.
 
 ### 4. Start Services
 ```bash
