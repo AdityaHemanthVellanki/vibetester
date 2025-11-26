@@ -1,7 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { healthCheck } from '@/lib/redis'
+import { redisConnection } from '@/lib/queue'
 
 export default async function handler(_req: NextApiRequest, res: NextApiResponse) {
-  const h = await healthCheck()
-  return res.status(h.ok ? 200 : 503).json(h)
+  try {
+    const start = Date.now()
+    const pong = await redisConnection.ping()
+    const latencyMs = Date.now() - start
+    return res.status(200).json({ ok: pong === 'PONG', pong, latencyMs })
+  } catch (e) {
+    return res.status(503).json({ ok: false })
+  }
 }

@@ -1,6 +1,6 @@
 import { Worker } from 'bullmq';
-import { ANALYSIS_QUEUE_NAME, AnalysisJob } from '@/lib/queue';
-import { getRedis, setProgress, appendProgressLog, setResult, setError } from '@/lib/redis';
+import { ANALYSIS_QUEUE_NAME, AnalysisJob, redisConnection } from '@/lib/queue';
+import { setLatestStage, appendProgressLog, setJobResult, setJobError } from '@/lib/redis';
 import { uploadOutDir } from '@/lib/storage';
 import { buildSandboxImage, runSandbox, cleanupSandbox } from '@/lib/sandbox';
 import * as fs from 'fs/promises';
@@ -32,14 +32,14 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
 
     let repoPath: string;
 
-    await setProgress(jobId, 'started');
+    await setLatestStage(jobId, 'started');
     await appendProgressLog(jobId, 'started');
-    await getRedis().set(`job:${jobId}:startedAt`, String(Date.now()));
+    try { await redisConnection.set(`job:${jobId}:startedAt`, String(Date.now())) } catch {}
     await pushMetric('jobs_started_total', { jobId }, 1);
 
     if (type === 'git' && gitUrl) {
-      try { await getRedis().setex(`job:${jobId}:meta`, 3600, JSON.stringify({ gitUrl })) } catch {}
-      await setProgress(jobId, 'validating git url');
+      try { await redisConnection.setex(`job:${jobId}:meta`, 3600, JSON.stringify({ gitUrl })) } catch {}
+      await setLatestStage(jobId, 'validating git url');
       await appendProgressLog(jobId, 'validating git url');
       repoPath = path.join(jobDir, 'repo');
       const allowedHosts = ['github.com','gitlab.com','bitbucket.org']
@@ -49,21 +49,21 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
         const host = new URL(normalized).hostname
         if (!allowedHosts.includes(host)) {
           const msg = `git host not allowed: ${host}`
-          await setError(jobId, msg)
-          await setProgress(jobId, 'failed')
+          await setJobError(jobId, msg)
+          await setLatestStage(jobId, 'failed')
           await appendProgressLog(jobId, `failed: ${msg}`)
           throw new Error(msg)
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
-        await setError(jobId, `git url invalid: ${msg}`)
-        await setProgress(jobId, 'failed')
+        await setJobError(jobId, `git url invalid: ${msg}`)
+        await setLatestStage(jobId, 'failed')
         await appendProgressLog(jobId, `failed: git url invalid: ${msg}`)
         throw e
       }
 
       await appendProgressLog(jobId, 'cloning')
-      await setProgress(jobId, 'cloning')
+      await setLatestStage(jobId, 'cloning')
       try { await fs.rm(repoPath, { recursive: true, force: true }) } catch {}
       const token = (job as any).gitToken
       const cloneRes = await cloneWithRetries(normalized, repoPath, { retries: 2, timeoutMs: 30_000, scrubToken: token })
@@ -71,11 +71,11 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
         const short = cloneRes.errorMessage || 'unknown error'
         const suggest = 'Check network connectivity, repo visibility, ensure HTTPS URL, or try again.'
         const fullMsg = `git clone failed: ${short}. ${suggest}`
-        await setError(jobId, fullMsg)
-        await setProgress(jobId, 'failed')
+        await setJobError(jobId, fullMsg)
+        await setLatestStage(jobId, 'failed')
         await appendProgressLog(jobId, `failed: ${fullMsg}`)
         await pushMetric('job_clone_failures_total', { jobId, error_type: String(cloneRes.errorType || 'OTHER') }, 1)
-        try {
+        try { 
           if (process.env.SENTRY_DSN) {
             Sentry.init({ dsn: process.env.SENTRY_DSN })
             Sentry.captureException(new Error(fullMsg), { tags: { jobId, host: new URL(normalized).hostname, error_type: String(cloneRes.errorType || 'OTHER') } })
@@ -89,10 +89,10 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
       }
       if (token) await pushMetric('job_clone_auth_attempts_total', { jobId }, 1)
       ;(job as any).gitToken = undefined
-      await setProgress(jobId, 'cloned')
+      await setLatestStage(jobId, 'cloned')
       await appendProgressLog(jobId, 'cloned')
     } else if (type === 'zip' && uploadPath) {
-      await setProgress(jobId, 'extracting');
+      await setLatestStage(jobId, 'extracting');
       await appendProgressLog(jobId, 'extracting');
       repoPath = path.join(jobDir, 'repo');
       await ensureDir(repoPath);
@@ -103,7 +103,7 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
       } catch (error) {
         throw new Error(`Failed to extract ZIP: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
-      await setProgress(jobId, 'extracted');
+      await setLatestStage(jobId, 'extracted');
       await appendProgressLog(jobId, 'extracted');
     } else {
       throw new Error('Invalid job type or missing parameters');
@@ -114,7 +114,7 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
 
     await buildSandboxImage();
 
-    await setProgress(jobId, 'scanning');
+    await setLatestStage(jobId, 'scanning');
     await appendProgressLog(jobId, 'scanning');
 
     const exitCode = await runSandbox({
@@ -123,7 +123,7 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
       outDir,
       env: { OPENAI_API_KEY: process.env.OPENAI_API_KEY, LLM_MODEL: process.env.LLM_MODEL },
       onLog: async (line) => {
-        await setProgress(jobId, line);
+        await setLatestStage(jobId, line);
         await appendProgressLog(jobId, line);
       }
     });
@@ -149,23 +149,23 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
     if (credsPresent) {
       try {
         const uploaded = await uploadOutDir(jobId, outDir);
-        await setResult(jobId, { s3Prefix: uploaded.s3Prefix, files: uploaded.files } as any);
+        await setJobResult(jobId, { s3Prefix: uploaded.s3Prefix, files: uploaded.files } as any);
       } catch (e) {
-        await setError(jobId, e instanceof Error ? e.message : 'Upload failed');
+        await setJobError(jobId, e instanceof Error ? e.message : 'Upload failed');
         throw e;
       }
     } else {
-      await setResult(jobId, { outDir, files } as any);
+      await setJobResult(jobId, { outDir, files } as any);
     }
 
-    await setProgress(jobId, 'done');
+    await setLatestStage(jobId, 'done');
     await appendProgressLog(jobId, 'done');
-    await getRedis().set(`job:${jobId}:completedAt`, String(Date.now()));
-    const s = await getRedis().get(`job:${jobId}:startedAt`)
-    const c = await getRedis().get(`job:${jobId}:completedAt`)
-    const startedAt = s ? Number(s) : 0
-    const completedAt = c ? Number(c) : 0
-    const durationMs = startedAt && completedAt ? (completedAt - startedAt) : 0
+    try { await redisConnection.set(`job:${jobId}:completedAt`, String(Date.now())) } catch {}
+    const sRaw = await redisConnection.get(`job:${jobId}:startedAt`).catch(() => null)
+    const cRaw = await redisConnection.get(`job:${jobId}:completedAt`).catch(() => null)
+    const s = sRaw ? Number(sRaw) : 0
+    const c = cRaw ? Number(cRaw) : 0
+    const durationMs = s && c ? (c - s) : 0
     await pushMetric('job_duration_seconds', { jobId }, durationMs / 1000);
 
     console.log(`Job ${jobId} completed successfully. Generated ${files.length} test files.`);
@@ -173,8 +173,8 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
   } catch (error) {
     console.error(`Job ${jobId} failed:`, error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    await setError(jobId, errorMessage);
-    await setProgress(jobId, 'failed');
+    await setJobError(jobId, errorMessage);
+    await setLatestStage(jobId, 'failed');
     await appendProgressLog(jobId, 'failed');
     await pushMetric('jobs_failed_total', { jobId }, 1);
     await cleanupSandbox(jobId);
@@ -184,8 +184,8 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
 
 async function start() {
   try {
-    if (typeof (getRedis() as any).connect === 'function') {
-      await (getRedis() as any).connect().catch((e: any) => { throw e })
+    if (typeof (redisConnection as any).connect === 'function') {
+      await (redisConnection as any).connect().catch((e: any) => { throw e })
     }
   } catch (e: any) {
     const code = e && typeof e === 'object' && 'code' in e ? String((e as any).code) : ''
@@ -203,13 +203,13 @@ async function start() {
       setTimeout(() => reject(new Error('Job timed out after 10 minutes')), tenMinutes);
     });
     await Promise.race([processAnalysisJob(analysisJob), timeoutPromise]).catch(async (e) => {
-      await setError(analysisJob.jobId, e instanceof Error ? e.message : 'Timeout');
-      await setProgress(analysisJob.jobId, 'failed');
+      await setJobError(analysisJob.jobId, e instanceof Error ? e.message : 'Timeout');
+      await setLatestStage(analysisJob.jobId, 'failed');
       await appendProgressLog(analysisJob.jobId, 'failed');
       throw e;
     });
   }, {
-    connection: getRedis(),
+    connection: redisConnection,
     concurrency: 1,
   });
 

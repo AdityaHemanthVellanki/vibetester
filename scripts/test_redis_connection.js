@@ -3,6 +3,10 @@ const IORedis = require('ioredis')
 async function main() {
   const url = process.env.REDIS_URL || 'redis://127.0.0.1:6379'
   const redis = new IORedis(url, { lazyConnect: true, retryStrategy: () => null })
+  redis.on('error', (e) => {
+    const code = e && e.code ? e.code : ''
+    console.error('redis error', code || String(e))
+  })
   try { await redis.connect() } catch (e) {
     console.error('connect error', e && e.code ? e.code : String(e))
   }

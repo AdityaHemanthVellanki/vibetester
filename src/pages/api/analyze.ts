@@ -5,7 +5,7 @@ import formidable from 'formidable';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { addAnalysisJob } from '@/lib/queue';
-import { setProgress, appendProgressLog } from '@/lib/redis';
+import { setLatestStage, appendProgressLog } from '@/lib/redis';
 import { verifySession, validateApiKeyHeader } from '@/lib/auth';
 import { checkRate } from '@/lib/rateLimiter';
 import { insertUsage } from '@/lib/db';
@@ -83,7 +83,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         await fs.writeFile(dest, data);
         try {
           await addAnalysisJob({ jobId, type: 'zip', uploadPath: dest });
-          try { await setProgress(jobId, 'queued'); await appendProgressLog(jobId, 'queued') } catch {}
+          try { await setLatestStage(jobId, 'queued'); await appendProgressLog(jobId, 'queued') } catch {}
           return res.status(200).json({ jobId });
         } catch (err: unknown) {
           const code = typeof (err as { code?: unknown })?.code === 'string' ? String((err as { code?: unknown }).code) : ''
@@ -95,7 +95,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       try {
         await addAnalysisJob({ jobId, type: 'git', gitUrl, gitToken } as any);
-        try { await setProgress(jobId, 'queued'); await appendProgressLog(jobId, 'queued') } catch {}
+        try { await setLatestStage(jobId, 'queued'); await appendProgressLog(jobId, 'queued') } catch {}
         return res.status(200).json({ jobId });
       } catch (err: unknown) {
         const code = typeof (err as { code?: unknown })?.code === 'string' ? String((err as { code?: unknown }).code) : ''
@@ -110,7 +110,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!gitUrl) return res.status(400).json({ error: 'gitUrl is required' });
       try {
         await addAnalysisJob({ jobId, type: 'git', gitUrl, gitToken } as any);
-        try { await setProgress(jobId, 'queued'); await appendProgressLog(jobId, 'queued') } catch {}
+        try { await setLatestStage(jobId, 'queued'); await appendProgressLog(jobId, 'queued') } catch {}
         return res.status(200).json({ jobId });
       } catch (err: unknown) {
         const code = typeof (err as { code?: unknown })?.code === 'string' ? String((err as { code?: unknown }).code) : ''

@@ -40,8 +40,8 @@ async function run(cmd: string, args: string[], opts: { cwd?: string; timeoutMs?
     let err = ''
     let timer: NodeJS.Timeout | null = null
     if (opts.timeoutMs) timer = setTimeout(() => { try { proc.kill('SIGTERM') } catch {} }, opts.timeoutMs)
-    proc.stdout.on('data', d => { out += String(d) })
-    proc.stderr.on('data', d => { err += String(d) })
+    if (proc.stdout) proc.stdout.on('data', d => { out += String(d) })
+    if (proc.stderr) proc.stderr.on('data', d => { err += String(d) })
     proc.on('exit', code => { if (timer) clearTimeout(timer); resolve({ code: code ?? 1, stdout: out, stderr: err }) })
     proc.on('error', (e: any) => { if (timer) clearTimeout(timer); resolve({ code: 127, stdout: out, stderr: String(e?.message||e) }) })
   })
