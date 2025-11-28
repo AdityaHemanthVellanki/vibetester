@@ -22,13 +22,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, code })
     })
     if (!tokenRes.ok) return res.status(500).json({ error: 'oauth failed' })
-    const tokenJson = await tokenRes.json() as any
-    const accessToken = tokenJson.access_token
+    const tokenJson = await tokenRes.json() as { access_token?: string }
+    const accessToken = tokenJson.access_token || ''
     const userRes = await fetch('https://api.github.com/user', { headers: { Authorization: `Bearer ${accessToken}` } })
-    const userJson = await userRes.json() as any
+    const userJson = await userRes.json() as { id?: number }
     const emailRes = await fetch('https://api.github.com/user/emails', { headers: { Authorization: `Bearer ${accessToken}` } })
-    const emails = await emailRes.json() as any[]
-    const primaryEmail = emails.find(e => e.primary)?.email || emails[0]?.email || ''
+    const emails = await emailRes.json() as Array<{ email?: string; primary?: boolean }>
+    const primaryEmail = (emails.find(e => e.primary)?.email || emails[0]?.email || '')
     const { id } = upsertUser(primaryEmail, String(userJson.id))
     const token = signJwt({ id, email: primaryEmail })
     res.setHeader('Set-Cookie', `session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7*24*3600}`)
