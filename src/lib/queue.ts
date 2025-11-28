@@ -1,7 +1,7 @@
-import { Queue } from 'bullmq';
+import { Queue, Worker, JobsOptions, Processor } from 'bullmq';
 import { getBullConnection } from '@/lib/redis';
 
-export const ANALYSIS_QUEUE_NAME = 'repo-analysis';
+export const ANALYSIS_QUEUE_NAME = 'analyze';
 
 export interface AnalysisJob {
   jobId: string;
@@ -11,26 +11,37 @@ export interface AnalysisJob {
   type: 'git' | 'zip';
 }
 
-let analysisQueue: Queue<AnalysisJob> | null = null;
-function getAnalysisQueue(): Queue<AnalysisJob> {
-  if (!analysisQueue) {
-    analysisQueue = new Queue<AnalysisJob>(ANALYSIS_QUEUE_NAME, {
+let sharedQueue: Queue<AnalysisJob> | null = null;
+export function getQueue(name: string = ANALYSIS_QUEUE_NAME): Queue<AnalysisJob> {
+  if (!sharedQueue) {
+    sharedQueue = new Queue<AnalysisJob>(name, {
       ...getBullConnection(),
       defaultJobOptions: {
-        removeOnComplete: 10,
-        removeOnFail: 5,
-        attempts: 1,
+        removeOnComplete: 100,
+        removeOnFail: 50,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
       },
     });
-    // BullMQ v5 handles scheduling without explicit QueueScheduler
   }
-  return analysisQueue;
+  return sharedQueue;
+}
+
+let sharedWorker: Worker<AnalysisJob> | null = null;
+export function getWorker(name: string = ANALYSIS_QUEUE_NAME, processor: Processor<AnalysisJob>, opts?: { concurrency?: number }): Worker<AnalysisJob> {
+  if (!sharedWorker) {
+    sharedWorker = new Worker<AnalysisJob>(name, processor, {
+      ...getBullConnection(),
+      concurrency: opts?.concurrency ?? 1,
+    });
+  }
+  return sharedWorker;
 }
 
 export async function addAnalysisJob(job: AnalysisJob): Promise<string> {
   try {
-    const queue = getAnalysisQueue();
-    const jobData = await queue.add('analyze-repo', job, { jobId: job.jobId });
+    const queue = getQueue();
+    const jobData = await queue.add('analyze', job, { jobId: job.jobId } as JobsOptions);
     return jobData.id!;
   } catch (err: any) {
     const msg = err?.code === 'ECONNREFUSED' || String(err?.message || '').includes('ECONNREFUSED')

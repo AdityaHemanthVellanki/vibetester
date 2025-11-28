@@ -1,4 +1,3 @@
-import fetch from 'node-fetch'
 import { config } from '@/lib/env'
 
 function push(url: string, body: string) {

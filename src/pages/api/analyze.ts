@@ -4,8 +4,8 @@ import { v4 as uuidv4 } from 'uuid';
 import formidable from 'formidable';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { addAnalysisJob } from '@/lib/queue';
-import { setLatestStage, appendProgressLog } from '@/lib/redis';
+import { getQueue } from '@/lib/queue';
+import { setLatestStage, appendProgressLog, setJobStatus } from '@/lib/redis';
 import { verifySession, validateApiKeyHeader } from '@/lib/auth';
 import { config as envConfig } from '@/lib/env'
 import { checkRate } from '@/lib/rateLimiter';
@@ -83,8 +83,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const data = await fs.readFile(upOne.filepath);
         await fs.writeFile(dest, data);
         try {
-          await addAnalysisJob({ jobId, type: 'zip', uploadPath: dest });
-          try { await setLatestStage(jobId, 'queued'); await appendProgressLog(jobId, 'queued') } catch {}
+          const q = getQueue()
+          await q.add('analyze', { jobId, type: 'zip', uploadPath: dest } as any, { jobId, attempts: 3, backoff: { type: 'exponential', delay: 2000 } })
+          try { await setJobStatus(jobId, 'queued'); await setLatestStage(jobId, 'queued'); await appendProgressLog(jobId, 'queued', 'queued') } catch {}
           return res.status(200).json({ jobId });
         } catch (err: unknown) {
           const code = typeof (err as { code?: unknown })?.code === 'string' ? String((err as { code?: unknown }).code) : ''
@@ -95,8 +96,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       try {
-        await addAnalysisJob({ jobId, type: 'git', gitUrl, gitToken } as any);
-        try { await setLatestStage(jobId, 'queued'); await appendProgressLog(jobId, 'queued') } catch {}
+        const q = getQueue()
+        await q.add('analyze', { jobId, type: 'git', gitUrl, gitToken } as any, { jobId, attempts: 3, backoff: { type: 'exponential', delay: 2000 } })
+        try { await setJobStatus(jobId, 'queued'); await setLatestStage(jobId, 'queued'); await appendProgressLog(jobId, 'queued', 'queued') } catch {}
         return res.status(200).json({ jobId });
       } catch (err: unknown) {
         const code = typeof (err as { code?: unknown })?.code === 'string' ? String((err as { code?: unknown }).code) : ''
@@ -110,8 +112,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const gitToken = String(gitTokenBody || gitTokenHeader || '')
       if (!gitUrl) return res.status(400).json({ error: 'gitUrl is required' });
       try {
-        await addAnalysisJob({ jobId, type: 'git', gitUrl, gitToken } as any);
-        try { await setLatestStage(jobId, 'queued'); await appendProgressLog(jobId, 'queued') } catch {}
+        const q = getQueue()
+        await q.add('analyze', { jobId, type: 'git', gitUrl, gitToken } as any, { jobId, attempts: 3, backoff: { type: 'exponential', delay: 2000 } })
+        try { await setJobStatus(jobId, 'queued'); await setLatestStage(jobId, 'queued'); await appendProgressLog(jobId, 'queued', 'queued') } catch {}
         return res.status(200).json({ jobId });
       } catch (err: unknown) {
         const code = typeof (err as { code?: unknown })?.code === 'string' ? String((err as { code?: unknown }).code) : ''

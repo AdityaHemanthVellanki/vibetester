@@ -7,7 +7,6 @@ import { initSentry } from '@/lib/sentry';
 import * as path from 'path';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  initSentry()
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     return res.status(405).json({ error: 'Method Not Allowed' });
@@ -17,6 +16,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!jobId) return res.status(400).json({ error: 'jobId is required' });
 
   try {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+    res.setHeader('Pragma', 'no-cache')
     const resultAny = await getJobResult(jobId) as any;
     if (!resultAny) return res.status(404).json({ error: 'Result not ready' });
 

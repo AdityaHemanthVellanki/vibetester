@@ -1,7 +1,7 @@
-import { Worker } from 'bullmq';
-import { ANALYSIS_QUEUE_NAME, AnalysisJob, redisConnection } from '@/lib/queue';
+import { getWorker, ANALYSIS_QUEUE_NAME, AnalysisJob, redisConnection } from '@/lib/queue';
+import { startWorkerHealth } from '@/../worker/health-check'
 import { config } from '@/lib/env'
-import { setLatestStage, appendProgressLog, setJobResult, setJobError } from '@/lib/redis';
+import { setLatestStage, appendProgressLog, setJobResult, setJobError, setJobStatus } from '@/lib/redis';
 import { uploadOutDir } from '@/lib/storage';
 import { buildSandboxImage, runSandbox, cleanupSandbox } from '@/lib/sandbox';
 import * as fs from 'fs/promises';
@@ -33,15 +33,16 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
 
     let repoPath: string;
 
+    await setJobStatus(jobId, 'running');
     await setLatestStage(jobId, 'started');
-    await appendProgressLog(jobId, 'started');
+    await appendProgressLog(jobId, 'started', 'started');
     try { await redisConnection.set(`job:${jobId}:startedAt`, String(Date.now())) } catch {}
     await pushMetric('jobs_started_total', { jobId }, 1);
 
     if (type === 'git' && gitUrl) {
       try { await redisConnection.setex(`job:${jobId}:meta`, 3600, JSON.stringify({ gitUrl })) } catch {}
-      await setLatestStage(jobId, 'validating git url');
-      await appendProgressLog(jobId, 'validating git url');
+      await setLatestStage(jobId, 'validating');
+      await appendProgressLog(jobId, 'validating git url', 'validating');
       repoPath = path.join(jobDir, 'repo');
       const allowedHosts = ['github.com','gitlab.com','bitbucket.org']
       let normalized = ''
@@ -63,7 +64,7 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
         throw e
       }
 
-      await appendProgressLog(jobId, 'cloning')
+      await appendProgressLog(jobId, 'cloning', 'cloning')
       await setLatestStage(jobId, 'cloning')
       try { await fs.rm(repoPath, { recursive: true, force: true }) } catch {}
       const token = (job as any).gitToken
@@ -91,10 +92,10 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
       if (token) await pushMetric('job_clone_auth_attempts_total', { jobId }, 1)
       ;(job as any).gitToken = undefined
       await setLatestStage(jobId, 'cloned')
-      await appendProgressLog(jobId, 'cloned')
+      await appendProgressLog(jobId, 'cloned', 'cloned')
     } else if (type === 'zip' && uploadPath) {
       await setLatestStage(jobId, 'extracting');
-      await appendProgressLog(jobId, 'extracting');
+      await appendProgressLog(jobId, 'extracting', 'extracting');
       repoPath = path.join(jobDir, 'repo');
       await ensureDir(repoPath);
       
@@ -105,7 +106,7 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
         throw new Error(`Failed to extract ZIP: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
       await setLatestStage(jobId, 'extracted');
-      await appendProgressLog(jobId, 'extracted');
+      await appendProgressLog(jobId, 'extracted', 'extracted');
     } else {
       throw new Error('Invalid job type or missing parameters');
     }
@@ -116,7 +117,7 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
     await buildSandboxImage();
 
     await setLatestStage(jobId, 'scanning');
-    await appendProgressLog(jobId, 'scanning');
+    await appendProgressLog(jobId, 'scanning', 'scanning');
 
     const exitCode = await runSandbox({
       jobId,
@@ -125,7 +126,7 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
       env: { OPENAI_API_KEY: process.env.OPENAI_API_KEY, LLM_MODEL: process.env.LLM_MODEL },
       onLog: async (line) => {
         await setLatestStage(jobId, line);
-        await appendProgressLog(jobId, line);
+        await appendProgressLog(jobId, line, 'generating');
       }
     });
 
@@ -159,7 +160,8 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
     }
 
     await setLatestStage(jobId, 'done');
-    await appendProgressLog(jobId, 'done');
+    await appendProgressLog(jobId, 'done', 'done');
+    await setJobStatus(jobId, 'done');
     try { await redisConnection.set(`job:${jobId}:completedAt`, String(Date.now())) } catch {}
     const sRaw = await redisConnection.get(`job:${jobId}:startedAt`).catch(() => null)
     const cRaw = await redisConnection.get(`job:${jobId}:completedAt`).catch(() => null)
@@ -167,6 +169,7 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
     const c = cRaw ? Number(cRaw) : 0
     const durationMs = s && c ? (c - s) : 0
     await pushMetric('job_duration_seconds', { jobId }, durationMs / 1000);
+    await pushMetric('job_processed_total', { jobId }, 1)
 
     console.log(`Job ${jobId} completed successfully. Generated ${files.length} test files.`);
     
@@ -175,7 +178,8 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     await setJobError(jobId, errorMessage);
     await setLatestStage(jobId, 'failed');
-    await appendProgressLog(jobId, 'failed');
+    await appendProgressLog(jobId, 'failed', 'failed');
+    await setJobStatus(jobId, 'failed');
     await pushMetric('jobs_failed_total', { jobId }, 1);
     await cleanupSandbox(jobId);
     throw error;
@@ -185,7 +189,7 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
 async function start() {
   // Worker will establish its own BullMQ connection; proceed
 
-  const worker = new Worker(ANALYSIS_QUEUE_NAME, async (job) => {
+  const worker = getWorker(ANALYSIS_QUEUE_NAME, async (job) => {
     const analysisJob = job.data as AnalysisJob;
     const tenMinutes = Number(process.env.SANDBOX_TIMEOUT_MS || '600000');
     const timeoutPromise = new Promise<void>((_, reject) => {
@@ -197,10 +201,7 @@ async function start() {
       await appendProgressLog(analysisJob.jobId, 'failed');
       throw e;
     });
-  }, {
-    connection: { url: config.redisUrl || 'redis://127.0.0.1:6379', maxRetriesPerRequest: null },
-    concurrency: 1,
-  });
+  }, { concurrency: 1 });
 
   worker.on('completed', (job) => {
     console.log(`Job ${job.id} completed`);
@@ -211,16 +212,19 @@ async function start() {
   });
 
   console.log('Worker started and listening for jobs...');
+  const stop = startWorkerHealth(`worker-${process.pid}`)
 
   process.on('SIGTERM', async () => {
     console.log('SIGTERM received, shutting down gracefully...');
     await worker.close();
+    stop()
     process.exit(0);
   });
 
   process.on('SIGINT', async () => {
     console.log('SIGINT received, shutting down gracefully...');
     await worker.close();
+    stop()
     process.exit(0);
   });
 }

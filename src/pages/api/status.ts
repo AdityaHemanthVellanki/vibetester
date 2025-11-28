@@ -13,6 +13,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!jobId) return res.status(400).json({ error: 'jobId is required' });
 
   try {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+    res.setHeader('Pragma', 'no-cache')
     const status = await getJobStatus(jobId);
     return res.status(200).json({ jobId, ...status });
   } catch (e: unknown) {
