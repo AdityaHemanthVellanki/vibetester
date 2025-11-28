@@ -1,11 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { upsertUser, getUserById } from '@/lib/db'
 import { signSession as signJwt, verifySession } from '@/lib/auth'
+import { config } from '@/lib/env'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const action = (req.query.action as string) || 'me'
   if (action === 'login') {
-    const clientId = process.env.GITHUB_OAUTH_CLIENT_ID || ''
+    const clientId = config.auth.githubClientId
     const redirectUri = encodeURIComponent(`${req.headers.origin}/api/auth?action=callback`)
     const url = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=user:email`
     res.status(302).setHeader('Location', url)
@@ -14,8 +15,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (action === 'callback') {
     const code = req.query.code as string
     if (!code) return res.status(400).json({ error: 'code required' })
-    const clientId = process.env.GITHUB_OAUTH_CLIENT_ID || ''
-    const clientSecret = process.env.GITHUB_OAUTH_CLIENT_SECRET || ''
+    const clientId = config.auth.githubClientId
+    const clientSecret = config.auth.githubClientSecret
     const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },

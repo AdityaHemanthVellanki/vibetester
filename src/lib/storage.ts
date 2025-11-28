@@ -1,27 +1,23 @@
-import { S3Client, PutObjectCommand, ListObjectsV2Command, GetObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3'
 import { getSignedUrl as sign } from '@aws-sdk/s3-request-presigner'
 import * as fs from 'fs/promises'
 import * as path from 'path'
+import { config } from '@/lib/env'
 
 // Configured for Cloudflare R2 — uses endpoint override
 // Paste your Cloudflare R2 credentials in .env (Access Keys)
 // AWS-compatible: works with AWS SDK v3 presigned URLs
 
 function client(): S3Client {
-  const endpoint = process.env.S3_ENDPOINT || undefined
-  const forcePathStyle = String(process.env.S3_FORCE_PATH_STYLE || '').toLowerCase() === 'true'
   return new S3Client({
-    region: process.env.S3_REGION || 'auto',
-    credentials: {
-      accessKeyId: process.env.S3_ACCESS_KEY_ID || 'changeme',
-      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || 'changeme',
-    },
-    endpoint,
-    forcePathStyle,
+    region: config.r2.region,
+    credentials: { accessKeyId: config.r2.accessKeyId, secretAccessKey: config.r2.secretAccessKey },
+    endpoint: config.r2.endpoint,
+    forcePathStyle: config.r2.forcePathStyle,
   })
 }
 
-const bucket = process.env.S3_BUCKET || 'your-r2-bucket-name'
+const bucket = config.r2.bucket
 
 export async function uploadOutDir(jobId: string, localPath: string): Promise<{ s3Prefix: string; files: { path: string; size: number }[] }>{
   const c = client()

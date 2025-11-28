@@ -1,10 +1,9 @@
 import OpenAI from 'openai';
+import { config } from '@/lib/env'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const openai = new OpenAI({ apiKey: config.openai.apiKey });
 
-const MODEL = process.env.LLM_MODEL || 'gpt-4o-mini';
+const MODEL = config.openai.model;
 const MAX_TOKENS = 1400;
 const TEMPERATURE = 0.0;
 

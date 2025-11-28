@@ -7,6 +7,7 @@ import * as path from 'path';
 import { addAnalysisJob } from '@/lib/queue';
 import { setLatestStage, appendProgressLog } from '@/lib/redis';
 import { verifySession, validateApiKeyHeader } from '@/lib/auth';
+import { config as envConfig } from '@/lib/env'
 import { checkRate } from '@/lib/rateLimiter';
 import { insertUsage } from '@/lib/db';
 
@@ -46,14 +47,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const allowAnon = (process.env.ALLOW_ANON || 'true') === 'true'
+    const allowAnon = envConfig.app.allowAnon
     const session = verifySession(req)
     const apiKeyAuth = validateApiKeyHeader(req)
     if (!allowAnon && !session && !apiKeyAuth) {
       return res.status(401).json({ error: 'unauthorized' })
     }
     const rlKey = apiKeyAuth ? `key:${apiKeyAuth.apiKeyId}` : session ? `user:${session.id}` : `ip:${req.socket.remoteAddress}`
-    const limit = Number(process.env.RATE_LIMIT_PER_MINUTE || '30')
+    const limit = envConfig.rateLimits.perMinute
     const rl = await checkRate(rlKey, limit)
     if (!rl.allowed) {
       res.setHeader('Retry-After', String(rl.reset - Math.floor(Date.now()/1000)))

@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { redisConnection } from '@/lib/queue'
+import { config } from '@/lib/env'
 
 export default async function handler(_req: NextApiRequest, res: NextApiResponse) {
   try {

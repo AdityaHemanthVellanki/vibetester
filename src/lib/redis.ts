@@ -1,10 +1,7 @@
 import IORedis, { Redis } from 'ioredis'
-
-const url = process.env.REDIS_URL
-const host = process.env.REDIS_HOST || '127.0.0.1'
-const port = Number(process.env.REDIS_PORT || '6379')
-const password = process.env.REDIS_PASSWORD || undefined
-const prefix = process.env.BULLMQ_PREFIX || 'ai-test-architect'
+import { config } from '@/lib/env'
+const url = config.redisUrl || ''
+const prefix = 'ai-test-architect'
 
 let redis: Redis | null = null
 export function getRedis(): Redis {
@@ -14,15 +11,7 @@ export function getRedis(): Redis {
       enableAutoPipelining: true,
       maxRetriesPerRequest: null,
       retryStrategy: (times) => Math.min(times * 500, 5000),
-    }) : new IORedis({
-      host,
-      port,
-      password,
-      lazyConnect: true,
-      enableAutoPipelining: true,
-      maxRetriesPerRequest: null,
-      retryStrategy: (times) => Math.min(times * 500, 5000),
-    })
+    }) : new IORedis(url)
     client.on('ready', () => { console.log('Redis ready') })
     client.on('error', (e) => { console.error('Redis error', e && (e as any).code ? (e as any).code : String(e)) })
     redis = client
@@ -30,11 +19,8 @@ export function getRedis(): Redis {
   return redis!
 }
 
-export function getBullConnection(): { connection: { url?: string; host?: string; port?: number; password?: string; maxRetriesPerRequest: null }; prefix?: string } {
-  if (url) {
-    return { connection: { url, maxRetriesPerRequest: null }, prefix }
-  }
-  return { connection: { host, port, password, maxRetriesPerRequest: null }, prefix }
+export function getBullConnection(): { connection: { url: string; maxRetriesPerRequest: null }; prefix?: string } {
+  return { connection: { url, maxRetriesPerRequest: null }, prefix }
 }
 
 export interface JobFile { path: string; size?: number }

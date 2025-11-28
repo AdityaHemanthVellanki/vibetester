@@ -31,8 +31,15 @@ services:
       - minio
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - redis_data:/data
+      - ./ops/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
   minio:
     image: quay.io/minio/minio
     command: server /data --console-address ":9001"
@@ -42,3 +49,6 @@ services:
     ports:
       - "9000:9000"
       - "9001:9001"
+
+volumes:
+  redis_data:

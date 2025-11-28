@@ -1,5 +1,6 @@
 import { Worker } from 'bullmq';
 import { ANALYSIS_QUEUE_NAME, AnalysisJob, redisConnection } from '@/lib/queue';
+import { config } from '@/lib/env'
 import { setLatestStage, appendProgressLog, setJobResult, setJobError } from '@/lib/redis';
 import { uploadOutDir } from '@/lib/storage';
 import { buildSandboxImage, runSandbox, cleanupSandbox } from '@/lib/sandbox';
@@ -197,7 +198,7 @@ async function start() {
       throw e;
     });
   }, {
-    connection: (process.env.REDIS_URL ? { url: process.env.REDIS_URL, maxRetriesPerRequest: null } : { host: process.env.REDIS_HOST || '127.0.0.1', port: Number(process.env.REDIS_PORT || '6379'), password: process.env.REDIS_PASSWORD || undefined, maxRetriesPerRequest: null }),
+    connection: { url: config.redisUrl || 'redis://127.0.0.1:6379', maxRetriesPerRequest: null },
     concurrency: 1,
   });
 
