@@ -2,10 +2,11 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { initSentry, addRetryBreadcrumb } from '@/lib/sentry'
 import { verifySession, validateApiKeyHeader } from '@/lib/auth'
 import { getJobStatus } from '@/lib/redis'
-import { addAnalysisJob, redisConnection } from '@/lib/queue'
+import { addAnalysisJob } from '@/lib/queue'
 import * as DB from '@/lib/db'
 import { v4 as uuidv4 } from 'uuid'
 import { checkRate } from '@/lib/rateLimiter'
+import { getRedis } from '@/lib/redis'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   initSentry()
@@ -40,9 +41,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const userKey = apiKeyAuth ? `key:${apiKeyAuth.apiKeyId}` : session ? `user:${session.id}` : `anon:${req.socket.remoteAddress}`
     const rlKey = `retry:${jobId}:${userKey}`
-    const cnt = Number(await redisConnection.get(rlKey) || '0')
+    let cnt = 0
+    try { cnt = Number(await getRedis().get(rlKey) || '0') } catch {}
     if (cnt >= 3) return res.status(429).json({ error: 'retry quota exceeded for this job' })
-    await redisConnection.set(rlKey, String(cnt + 1), 'EX', 24 * 3600)
+    try { await getRedis().set(rlKey, String(cnt + 1), 'EX', 24 * 3600) } catch {}
 
     const limitPerMinute = Number(process.env.RATE_LIMIT_PER_MINUTE || '30')
     const rlGlobalKey = userKey
