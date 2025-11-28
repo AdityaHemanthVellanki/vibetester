@@ -1,0 +1,49 @@
+name: Deploy
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Run terraform apply"
+        required: true
+        default: "false"
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      - name: Terraform Plan
+        run: |
+          cd terraform
+          terraform init -input=false
+          terraform plan -input=false \
+            -var "name=ai-test-architect" \
+            -var "aws_region=${{ secrets.AWS_REGION }}" \
+            -var "vpc_cidr=10.0.0.0/16" \
+            -var "domain=${{ secrets.DOMAIN }}" \
+            -var "db_username=app" \
+            -var "db_password=${{ secrets.DB_PASSWORD }}" \
+            -var "cloudflare_api_token=${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -var "cloudflare_account_id=${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" \
+            -var "r2_bucket=${{ secrets.R2_BUCKET }}"
+      - name: Terraform Apply
+        if: ${{ github.event.inputs.apply == 'true' }}
+        run: |
+          cd terraform
+          terraform apply -auto-approve -input=false \
+            -var "name=ai-test-architect" \
+            -var "aws_region=${{ secrets.AWS_REGION }}" \
+            -var "vpc_cidr=10.0.0.0/16" \
+            -var "domain=${{ secrets.DOMAIN }}" \
+            -var "db_username=app" \
+            -var "db_password=${{ secrets.DB_PASSWORD }}" \
+            -var "cloudflare_api_token=${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -var "cloudflare_account_id=${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" \
+            -var "r2_bucket=${{ secrets.R2_BUCKET }}"

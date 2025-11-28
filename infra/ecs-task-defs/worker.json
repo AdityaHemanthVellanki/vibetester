@@ -1,0 +1,22 @@
+{
+  "family": "ai-test-architect-worker",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "",
+  "taskRoleArn": "",
+  "containerDefinitions": [
+    {
+      "name": "worker",
+      "image": "",
+      "environment": [
+        { "name": "REDIS_URL", "value": "" },
+        { "name": "S3_ENDPOINT", "value": "" },
+        { "name": "S3_BUCKET", "value": "" }
+      ],
+      "essential": true,
+      "logConfiguration": { "logDriver": "awslogs", "options": { "awslogs-group": "/ecs/ai-test-architect", "awslogs-region": "", "awslogs-stream-prefix": "worker" } }
+    }
+  ]
+}

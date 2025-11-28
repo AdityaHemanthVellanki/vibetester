@@ -1,0 +1,9 @@
+variable "name" { type = string }
+variable "aws_region" { type = string }
+variable "domain" { type = string }
+variable "vpc_cidr" { type = string }
+variable "db_username" { type = string }
+variable "db_password" { type = string }
+variable "cloudflare_api_token" { type = string }
+variable "cloudflare_account_id" { type = string }
+variable "r2_bucket" { type = string }

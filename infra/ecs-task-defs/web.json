@@ -1,0 +1,23 @@
+{
+  "family": "ai-test-architect-web",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "",
+  "taskRoleArn": "",
+  "containerDefinitions": [
+    {
+      "name": "web",
+      "image": "",
+      "portMappings": [{ "containerPort": 3000, "protocol": "tcp" }],
+      "environment": [
+        { "name": "REDIS_URL", "value": "" },
+        { "name": "DB_URL", "value": "" },
+        { "name": "SENTRY_DSN", "value": "" }
+      ],
+      "essential": true,
+      "logConfiguration": { "logDriver": "awslogs", "options": { "awslogs-group": "/ecs/ai-test-architect", "awslogs-region": "", "awslogs-stream-prefix": "web" } }
+    }
+  ]
+}

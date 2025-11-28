@@ -1,0 +1,17 @@
+{
+  "family": "ai-test-architect-sandbox",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "",
+  "taskRoleArn": "",
+  "containerDefinitions": [
+    {
+      "name": "sandbox",
+      "image": "",
+      "essential": true,
+      "logConfiguration": { "logDriver": "awslogs", "options": { "awslogs-group": "/ecs/ai-test-architect", "awslogs-region": "", "awslogs-stream-prefix": "sandbox" } }
+    }
+  ]
+}

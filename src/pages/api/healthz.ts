@@ -17,6 +17,6 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
 
   try { const key = 'healthz:ping'; await redisConnection.set(key,'ok'); const v = await redisConnection.get(key); checks.workerPing = { ok: v === 'ok' } } catch (e) { checks.workerPing = { ok: false, error: e instanceof Error ? e.message : String(e) } }
 
-  const ok = Object.values(checks).every((c: any) => c && c.ok || c.skipped)
+  const ok = (checks.redis?.ok === true) && (checks.workerPing?.ok === true) && ((checks.storage?.ok === true) || (checks.storage?.skipped === true))
   return res.status(ok ? 200 : 503).json({ ok, checks })
 }

@@ -128,7 +128,6 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
       }
     });
 
-
     if (exitCode !== 0) {
       throw new Error(`Analyzer container exited with code ${exitCode}`);
     }
@@ -183,18 +182,7 @@ async function processAnalysisJob(job: AnalysisJob): Promise<void> {
 }
 
 async function start() {
-  try {
-    if (typeof (redisConnection as any).connect === 'function') {
-      await (redisConnection as any).connect().catch((e: any) => { throw e })
-    }
-  } catch (e: any) {
-    const code = e && typeof e === 'object' && 'code' in e ? String((e as any).code) : ''
-    const msg = e && typeof e === 'object' && 'message' in e ? String((e as any).message) : String(e)
-    console.error('Redis unavailable:', code || msg)
-    console.error('Start Redis (e.g., docker compose up) or set REDIS_URL')
-    process.exit(0)
-    return
-  }
+  // Worker will establish its own BullMQ connection; proceed
 
   const worker = new Worker(ANALYSIS_QUEUE_NAME, async (job) => {
     const analysisJob = job.data as AnalysisJob;
@@ -209,7 +197,7 @@ async function start() {
       throw e;
     });
   }, {
-    connection: redisConnection,
+    connection: (process.env.REDIS_URL ? { url: process.env.REDIS_URL, maxRetriesPerRequest: null } : { host: process.env.REDIS_HOST || '127.0.0.1', port: Number(process.env.REDIS_PORT || '6379'), password: process.env.REDIS_PASSWORD || undefined, maxRetriesPerRequest: null }),
     concurrency: 1,
   });
 
